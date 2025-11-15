@@ -158,7 +158,7 @@ to the top automatically.
 
 ### Citation commands
 
-Pressing `<C-c>` opens a dedicated picker with all enabled citation templates. By default the following commands are active:
+Pressing `<C-c>` opens a dedicated picker with all enabled citation templates. Each row shows the command, required packages (if any), description, and a rendered sample for the highlighted entry so you can confirm the output before inserting. By default the following commands are active:
 
 | Command | Package(s) | Description |
 |---------|------------|-------------|
@@ -264,7 +264,7 @@ The plugin ships ready-to-enable templates for every `\cite`-family command prov
 
 ### Citation formats
 
-`<C-s>` and `<C-r>` insert ready-made textual reference templates. `<C-y>` opens a picker listing every enabled format. The defaults focus on APA 7 (enabled) plus Harvard and Oxford (disabled) in English.
+`<C-s>` and `<C-r>` insert ready-made textual reference templates. `<C-y>` opens a picker listing every enabled format with descriptive labels and per-entry samples. APA 7 (in-text and reference), Harvard (in-text and reference), and Oxford (reference) ship enabled by default so you can compare them immediately.
 
 The bundled APA 7 presets derive family-name-only in-text citations and assemble reference entries with editors, book titles, publishers, page ranges, and DOI/URL links whenever that data exists.
 
@@ -338,6 +338,7 @@ Each entry exposes derived metadata for templates in addition to the raw BibTeX 
 - `{{pages_collection}}`: Page range prefixed with `pp.`/`p.` for chapters and collections.
 - `{{doi}}`, `{{url}}`: Cleaned DOI/URL values (`{{doi}}` expands to `https://doi.org/<value>` when needed).
 - `{{year}}`, `{{title}}`, `{{organization}}`: Sanitised year, title, and organisation fallbacks.
+- Wrap placeholders in triple braces (e.g. `{{{key}}}`) to automatically surround the resolved value with `{}` while trimming stray whitespace.
 
 All derived values strip common LaTeX accent escapes and convert them to UTF-8 so the rendered citation displays the expected characters (e.g. `G\"oteborg` → `Göteborg`).
 

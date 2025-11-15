@@ -396,15 +396,36 @@ local function field_value(entry, name)
   return entry.fields[name] or ""
 end
 
+---Format a template using entry metadata, supporting triple braces to wrap values in `{}` automatically.
+---@param template string
+---@param entry SnacksBibtexEntry
+---@return string
 local function format_template(template, entry)
   if not template or template == "" then
     return ""
   end
   ensure_template_values(entry)
-  return (template:gsub("{{(.-)}}", function(field)
-    field = vim.trim(field)
+  local function resolve(field)
+    field = vim.trim(field or "")
+    if field == "" then
+      return ""
+    end
     return field_value(entry, field)
-  end))
+  end
+  local text = template
+  text = text:gsub("{{{%s*(.-)%s*}}}", function(field)
+    local value = resolve(field)
+    if value == "" then
+      return ""
+    end
+    return "{" .. value .. "}"
+  end)
+  text = text:gsub("{{%s*(.-)%s*}}", function(field)
+    return resolve(field)
+  end)
+  text = text:gsub("{%s+", "{")
+  text = text:gsub("%s+}", "}")
+  return text
 end
 
 local latex_accent_map = {
@@ -1291,7 +1312,7 @@ local function resolve_default_citation_template(cfg)
   return cfg.preview_format
 end
 
----Open a citation command picker that applies templates, renders previews, and updates history.
+---Open a citation command picker that applies templates, renders previews, and produces highlight-aware list rows.
 ---@param snacks snacks.picker
 ---@param entry SnacksBibtexEntry
 ---@param commands SnacksBibtexCitationCommand[]
@@ -1346,25 +1367,38 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, parent
     items = items,
     format = function(item)
       local parts = {}
+      local function append(text, hl)
+        if not text or text == "" then
+          return
+        end
+        if #parts > 0 then
+          parts[#parts + 1] = " "
+        end
+        if hl then
+          parts[#parts + 1] = { text, hl }
+        else
+          parts[#parts + 1] = text
+        end
+      end
       if show_command then
-        parts[#parts + 1] = { item.command.command }
+        append(item.command.command)
       end
       if show_packages and item.packages and item.packages ~= "" then
-        parts[#parts + 1] = { ("[%s]"):format(item.packages), "Comment" }
+        append(("[%s]"):format(item.packages), "Comment")
       end
       if show_template and item.template and item.template ~= "" then
-        parts[#parts + 1] = { item.template, "String" }
+        append(item.template, "String")
       end
       if show_description and item.description and item.description ~= "" then
-        parts[#parts + 1] = { item.description, "Comment" }
+        append(item.description, "Comment")
       end
       if item.sample and item.sample ~= "" then
-        parts[#parts + 1] = { item.sample, "String" }
+        append("→ " .. item.sample, "String")
       end
-      if vim.tbl_isempty(parts) then
-        parts[#parts + 1] = { item.command.command }
+      if #parts == 0 then
+        append(item.command.command)
       end
-      return { parts }
+      return parts
     end,
     preview = "preview",
     actions = {
@@ -1431,20 +1465,34 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, parent_p
     title = "Citation formats",
     items = items,
     format = function(item)
-      local parts = { item.label }
+      local parts = {}
+      local function append(text, hl)
+        if not text or text == "" then
+          return
+        end
+        if #parts > 0 then
+          parts[#parts + 1] = " "
+        end
+        if hl then
+          parts[#parts + 1] = { text, hl }
+        else
+          parts[#parts + 1] = text
+        end
+      end
+      append(item.label)
       if item.category and item.category ~= "" then
-        parts[#parts + 1] = ("[%s]"):format(item.category)
+        append(("[%s]"):format(item.category), "Comment")
       end
       if item.locale and item.locale ~= "" then
-        parts[#parts + 1] = ("(%s)"):format(item.locale)
+        append(("(%s)"):format(item.locale), "Comment")
       end
       if item.description and item.description ~= "" then
-        parts[#parts + 1] = "— " .. item.description
+        append("— " .. item.description, "Comment")
       end
       if item.sample and item.sample ~= "" then
-        parts[#parts + 1] = "→ " .. item.sample
+        append("→ " .. item.sample, "String")
       end
-      return table.concat(parts, " ")
+      return parts
     end,
     preview = "preview",
     actions = {
