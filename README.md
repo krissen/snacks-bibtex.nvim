@@ -6,7 +6,7 @@ Scan local and global `*.bib` files, preview entries, and insert citation keys o
 ## Features
 
 - Finds BibTeX entries from the current project and optional global libraries.
-- Search over configurable fields (author, title, year, …) with LaTeX accent awareness.
+- Search over configurable fields (author, title, year, …) with LaTeX accent awareness and field-priority aware ranking.
 - Rich preview rendered directly from the BibTeX entry.
 - Ready-made actions for inserting keys, full entries, formatted citations, or individual fields.
 - Quick shortcuts for `\cite`, `\citep`, `\citet`, and formatted APA/Harvard/Oxford references (with pickers for the full catalogues).
@@ -72,7 +72,7 @@ require("snacks-bibtex").setup({
   files = nil,                      -- explicit list of project-local bib files
   global_files = {},                -- list of additional bib files
   search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
-  match_priority = { "author", "year", "title" }, -- field preference when ranking matches
+  match_priority = { "author", "year", "title" }, -- remaining search_fields are appended automatically
   format = "%s",                    -- how keys are inserted with <CR>
   preview_format = "{{author}} ({{year}}), {{title}}",
   citation_format = "{{author}} ({{year}})", -- fallback text when no format template is available
@@ -117,14 +117,15 @@ providing deterministic alphabetical fallbacks.
 
 When you start typing, the picker favours the best scoring matches and then prioritises the fields you care about the most. By default the
 `match_sort` rules expand to `{ { field = "score", direction = "desc" }, { field = "match_priority" }, unpack(sort) }`, so score wins first,
-then matches on author, year, title, and the remaining search fields (in that order) before falling back to frecency, author, year, and
-source order. Override `match_sort` to change that behaviour—for example `{ { field = "score", direction = "desc" }, { field =
-"match_priority", direction = "asc" }, { field = "recent", direction = "desc" } }` keeps the best matches first but prefers recently used
-references over older favourites.
+then compares on the configured `match_priority` order before falling back to frecency, author, year, and
+source order. Override `match_sort` to change that behaviour—for example `{ { field = "score", direction = "desc" }, { field = "match_priority", direction = "asc" }, { field = "recent", direction = "desc" } }`
+keeps the best matches first but prefers recently used references over older favourites.
 
-The `match_priority` list mirrors `search_fields` by default, but you can reorder or trim it to favour different fields. Direct key matches
+`match_priority` automatically extends your `search_fields` list. The default configuration starts with `author`, `year`, and `title`, then
+appends the remaining search fields (`journal`, `journaltitle`, `editor` by default) so matches from earlier fields outrank the rest when their
+base scores tie. Adjust `search_fields` or provide an explicit `match_priority` list to fine-tune the order. Direct key matches
 always rank ahead of the configured fields, and accent-normalised values inherit the same priority as their original field, so typing
-`Tröskelbegrepp` will highlight entries stored as `Tr{"o}skelbegrepp` without losing relevance.
+`Tröskelbegrepp` will highlight entries stored as `Tr{\"o}skelbegrepp` without losing relevance.
 
 You can tweak or replace the ordering by editing the `sort` list (used when the prompt is empty) and the `match_sort` list (used after you
 begin typing). Each rule accepts a `field` and a `direction` (`"asc"` or `"desc"`). Supported fields include `score`, `match_priority`,
