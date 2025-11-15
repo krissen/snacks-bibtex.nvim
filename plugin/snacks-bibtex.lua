@@ -1,0 +1,23 @@
+if vim.g.loaded_snacks_bibtex then
+  return
+end
+vim.g.loaded_snacks_bibtex = true
+
+vim.api.nvim_create_user_command("SnacksBibtex", function(cmd_opts)
+  local ok, bibtex = pcall(require, "snacks-bibtex")
+  if not ok then
+    vim.notify("snacks-bibtex.nvim is not available: " .. bibtex, vim.log.levels.ERROR, {
+      title = "snacks-bibtex",
+    })
+    return
+  end
+  local opts = cmd_opts.args ~= "" and { format = cmd_opts.args } or nil
+  bibtex.bibtex(opts)
+end, {
+  desc = "Open the Snacks BibTeX picker",
+  nargs = "?",
+  complete = function()
+    -- No predefined completion items; returning an empty list keeps the command quiet.
+    return {}
+  end,
+})
