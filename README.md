@@ -58,13 +58,13 @@ Key | Action
 `<C-p>` | Insert `\citep{<key>}` (natbib parenthetical citation).
 `<C-t>` | Insert `\citet{<key>}` (natbib textual citation).
 `<C-c>` | Open the citation command picker covering the full BibTeX/natbib/BibLaTeX catalogue.
-`<C-g>` | Jump to the BibTeX source file at the first line of the selected entry.
+`<C-g>` | Jump to the BibTeX source file at the first line of the selected entry (reuses the window you launched the picker from).
 `<C-s>` | Insert the default in-text citation format (APA 7 in English by default).
 `<C-r>` | Insert the default reference-list citation format (APA 7 in English by default).
 `<C-y>` | Open the citation format picker (APA, Harvard, Oxford templates included with live previews, labelled rows, and inline samples).
 `<C-f>` | Open a secondary picker to choose and insert a single field value.
 
-`<CR>` works from both the search prompt and the results list, and snacks-bibtex overrides Snacks' default confirm action so Enter always inserts into the buffer you launched the picker from instead of opening the BibTeX source. All insertion shortcuts write into that original buffer and window, and the picker restores your previous insert/replace mode so trigger mappings can safely run without leaving you in normal mode. Use `<C-g>` whenever you want to tweak the bibliographic data itself—the picker closes and focuses the BibTeX file at the entry's first line so you can edit immediately.
+`<CR>` works from both the search prompt and the results list, and snacks-bibtex overrides Snacks' default confirm action so Enter always inserts into the buffer you launched the picker from instead of opening the BibTeX source. All insertion shortcuts write into that original buffer and window, and the picker restores your previous insert/replace mode so trigger mappings can safely run without leaving you in normal mode. Use `<C-g>` whenever you want to tweak the bibliographic data itself—the picker closes and focuses the BibTeX file at the entry's first line in the originating window so you can edit immediately without juggling splits.
 
 The citation format picker renders each enabled template for the highlighted entry, giving you a preview of the exact text that will be inserted. APA (in-text and reference), Harvard (in-text and reference), and Oxford (reference) formats ship enabled by default so you can immediately compare them; disable or extend the list through `citation_formats`.
 

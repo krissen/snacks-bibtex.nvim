@@ -1894,6 +1894,7 @@ local function make_actions(snacks, cfg)
   actions.insert_key = insert_key_action
   actions.confirm = insert_key_action
 
+  ---Open the selected entry's source file in the window where the picker was launched.
   actions.open_entry = function(picker, item)
     if not item then
       return
@@ -1924,7 +1925,11 @@ local function make_actions(snacks, cfg)
       if not vim.api.nvim_win_is_valid(win) then
         return
       end
-      vim.api.nvim_set_current_buf(win, buf)
+      if win == vim.api.nvim_get_current_win() then
+        vim.api.nvim_set_current_buf(buf)
+      else
+        vim.api.nvim_win_set_buf(win, buf)
+      end
       local target_line = math.max(1, tonumber(line) or 1)
       vim.api.nvim_win_set_cursor(win, { target_line, 0 })
     end)
