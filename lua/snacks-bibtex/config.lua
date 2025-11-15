@@ -10,6 +10,7 @@ local M = {}
 ---@field citation_format? string Template used when inserting formatted citations
 ---@field default_citation_format? string Identifier of the default citation format template
 ---@field citation_format_defaults? { in_text?: string, reference?: string } Default citation format identifiers per usage
+---@field match_priority string[]|nil Ordered list of fields prioritised when ranking matches
 ---@field citation_command_picker? { title?: string, command?: boolean, description?: boolean, packages?: boolean, template?: boolean } Citation command picker presentation settings
 ---@class SnacksBibtexCitationCommand
 ---@field command string
@@ -44,6 +45,12 @@ local M = {}
 ---@field direction? "asc"|"desc"|"ascending"|"descending"
 
 local defaults ---@type SnacksBibtexConfig
+
+---@class SnacksBibtexMatchPriority
+---@field map table<string, integer>
+---@field order string[]
+---@field default integer
+---@field raw string[]
 
 local function deepcopy(tbl)
   return vim.deepcopy(tbl)
@@ -174,16 +181,90 @@ local function ensure_match_sort(sort, base)
     normalized = vim.deepcopy(base or {})
   end
   local has_score = false
+  local has_priority = false
   for _, rule in ipairs(normalized) do
     if type(rule) == "table" and rule.field == "score" then
       has_score = true
-      break
+    elseif type(rule) == "table" and rule.field == "match_priority" then
+      has_priority = true
     end
   end
   if not has_score then
     table.insert(normalized, 1, { field = "score", direction = "desc" })
   end
+  if not has_priority then
+    local insert_at = #normalized + 1
+    for idx, rule in ipairs(normalized) do
+      if rule.field == "score" then
+        insert_at = idx + 1
+        break
+      end
+    end
+    table.insert(normalized, insert_at, { field = "match_priority", direction = "asc" })
+  end
   return normalized
+end
+
+---@param list string[]|nil
+---@return string[]|nil
+local function normalize_field_list(list)
+  if not list then
+    return nil
+  end
+  local ret = {}
+  for _, value in ipairs(list) do
+    if type(value) == "string" and value ~= "" then
+      ret[#ret + 1] = value:lower()
+    end
+  end
+  return ret
+end
+
+---@param priority string[]|nil
+---@param search_fields string[]|nil
+---@return SnacksBibtexMatchPriority
+local function normalize_match_priority(priority, search_fields)
+  local order = {}
+  local seen = {} ---@type table<string, boolean>
+  local function add(field)
+    if type(field) ~= "string" or field == "" then
+      return
+    end
+    local key = field:lower()
+    if seen[key] then
+      return
+    end
+    seen[key] = true
+    order[#order + 1] = key
+  end
+
+  add("key")
+  for _, field in ipairs(priority or {}) do
+    add(field)
+  end
+  for _, field in ipairs(search_fields or {}) do
+    add(field)
+  end
+  add("text")
+
+  local map = {} ---@type table<string, integer>
+  for idx, field in ipairs(order) do
+    map[field] = idx
+  end
+
+  return {
+    map = map,
+    order = order,
+    default = #order + 1,
+    raw = priority or {},
+  }
+end
+
+---@param cfg SnacksBibtexConfig
+local function apply_match_priority(cfg)
+  cfg.search_fields = normalize_field_list(cfg.search_fields) or cfg.search_fields
+  cfg.match_priority = normalize_field_list(cfg.match_priority)
+  cfg._match_priority = normalize_match_priority(cfg.match_priority, cfg.search_fields)
 end
 
 ---@return SnacksBibtexConfig
@@ -192,7 +273,8 @@ local function init_defaults()
     depth = 1,
     files = nil,
     global_files = {},
-    search_fields = { "author", "title", "year", "journal", "journaltitle", "editor" },
+    search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
+    match_priority = { "author", "year", "title" },
     format = "%s",
     preview_format = "{{author}} ({{year}}), {{title}}",
     citation_format = "{{author}} ({{year}})",
@@ -861,6 +943,7 @@ local function init_defaults()
   normalize_citation_formats(defaults.citation_formats)
   defaults.sort = normalize_sort(defaults.sort)
   defaults.match_sort = ensure_match_sort(defaults.match_sort, defaults.sort)
+  apply_match_priority(defaults)
   return defaults
 end
 
@@ -880,6 +963,7 @@ function M.setup(opts)
   normalize_citation_formats(merged.citation_formats)
   merged.sort = normalize_sort(merged.sort)
   merged.match_sort = ensure_match_sort(merged.match_sort, merged.sort)
+  apply_match_priority(merged)
   options = merged
   return deepcopy(options)
 end
@@ -903,6 +987,7 @@ function M.resolve(opts)
   normalize_citation_formats(merged.citation_formats)
   merged.sort = normalize_sort(merged.sort)
   merged.match_sort = ensure_match_sort(merged.match_sort, merged.sort)
+  apply_match_priority(merged)
   return merged
 end
 

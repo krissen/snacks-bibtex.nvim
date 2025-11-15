@@ -217,6 +217,12 @@ local function get_sort_value(item, field)
     return record and record.last or 0
   elseif field == "score" then
     return item.score or 0
+  elseif field == "match_priority" then
+    return item._sb_match_priority or item._sb_priority_default or math.huge
+  elseif field == "match_field" then
+    return normalize_sort_string(item._sb_match_field)
+  elseif field == "match_offset" then
+    return item._sb_match_offset or math.huge
   elseif field == "author" then
     return normalize_sort_string(fields.author) or normalize_sort_string(fields.editor)
   elseif field == "title" then
@@ -889,24 +895,75 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, parent_p
   })
 end
 
----Create a picker item enriched with history metadata for sorting.
+---Append a searchable segment to the combined picker text and track its offsets.
+---@param builder string[]
+---@param segments table[]
+---@param cursor integer
+---@param field string
+---@param value any
+---@param priority integer
+---@param opts? { normalized?: boolean }
+---@return integer
+local function append_search_segment(builder, segments, cursor, field, value, priority, opts)
+  if value == nil then
+    return cursor
+  end
+  local text = tostring(value)
+  if text == "" then
+    return cursor
+  end
+  if cursor > 0 then
+    builder[#builder + 1] = " · "
+    cursor = cursor + 3
+  end
+  local from = cursor + 1
+  builder[#builder + 1] = text
+  cursor = cursor + #text
+  segments[#segments + 1] = {
+    field = field,
+    from = from,
+    to = cursor,
+    priority = priority,
+    normalized = opts and opts.normalized or false,
+  }
+  return cursor
+end
+
+---Create a picker item enriched with history, segment metadata, and field priorities.
 ---@param entry SnacksBibtexEntry
 ---@param cfg SnacksBibtexResolvedConfig
 ---@param now integer
 ---@return table
 local function make_item(entry, cfg, now)
   local fields = entry.fields or {}
-  local search_parts = { entry.key }
+  local priority_meta = cfg._match_priority or { map = {}, default = math.huge }
+  local builder = {}
+  local segments = {}
+  local cursor = 0
+  local function add_segment(field, value, opts)
+    local priority = priority_meta.map[field] or priority_meta.default
+    cursor = append_search_segment(builder, segments, cursor, field, value, priority, opts)
+  end
+
+  add_segment("key", entry.key)
+
   for _, name in ipairs(cfg.search_fields or {}) do
-    local value = fields[name:lower()]
+    local field_name = name:lower()
+    local value = fields[field_name]
     if value and value ~= "" then
-      search_parts[#search_parts + 1] = value
+      add_segment(field_name, value)
       local normalized = latex_to_unicode(value)
       if normalized ~= "" and normalized ~= value then
-        search_parts[#search_parts + 1] = normalized
+        add_segment(field_name, normalized, { normalized = true })
       end
     end
   end
+
+  local search_text = table.concat(builder)
+  if search_text == "" then
+    search_text = entry.key or ""
+  end
+
   local preview = format_template(cfg.preview_format, entry)
   if preview == "" then
     preview = entry.key
@@ -916,7 +973,7 @@ local function make_item(entry, cfg, now)
     label = ("%s — %s"):format(entry.key, preview)
   end
   local history_record = get_history_entry(entry.key)
-  return {
+  local item = {
     key = entry.key,
     type = entry.type,
     fields = fields,
@@ -926,13 +983,28 @@ local function make_item(entry, cfg, now)
     order = entry.order or 0,
     history = history_record,
     frecency = compute_frecency(history_record, now),
-    text = table.concat(search_parts, " · "),
+    text = search_text,
     label = label,
     preview = {
       text = entry.raw,
       ft = "bib",
     },
+    _sb_segments = segments,
+    _sb_priority_default = priority_meta.default,
+    _sb_priority_map = priority_meta.map,
+    _sb_match_priority = priority_meta.default,
   }
+
+  for _, name in ipairs(cfg.search_fields or {}) do
+    local field_name = name:lower()
+    if not item[field_name] and fields[field_name] then
+      item[field_name] = fields[field_name]
+    end
+  end
+
+  item.key = item.key or ""
+
+  return item
 end
 
 local function to_lines(text)
@@ -941,6 +1013,79 @@ local function to_lines(text)
     table.remove(lines)
   end
   return lines
+end
+
+---Reset the cached match metadata for the given item.
+---@param item table
+local function reset_match_priority(item)
+  local default_priority = item._sb_priority_default or math.huge
+  item._sb_match_priority = default_priority
+  item._sb_match_field = nil
+  item._sb_match_offset = nil
+end
+
+---Return the segment that contains the given match position.
+---@param segments table[]
+---@param pos integer
+---@return table|nil, integer
+local function segment_for_position(segments, pos)
+  for _, segment in ipairs(segments) do
+    if pos >= segment.from and pos <= segment.to then
+      return segment, pos - segment.from
+    end
+  end
+  return nil, math.huge
+end
+
+---Update the cached match priority for a specific field/offset combination.
+---@param item table
+---@param field string
+---@param offset integer
+local function apply_field_match(item, field, offset)
+  local default_priority = item._sb_priority_default or math.huge
+  local current_priority = item._sb_match_priority or default_priority
+  local current_offset = item._sb_match_offset or math.huge
+  local priority_map = item._sb_priority_map or {}
+  local priority = priority_map[field] or default_priority
+  if priority < current_priority or (priority == current_priority and offset < current_offset) then
+    item._sb_match_priority = priority
+    item._sb_match_field = field
+    item._sb_match_offset = offset
+  end
+end
+
+---Populate the cached match priority information using the matcher results.
+---@param matcher snacks.picker.Matcher
+---@param item table
+local function update_match_priority(matcher, item)
+  if not item or not item._sb_segments then
+    return
+  end
+  reset_match_priority(item)
+  if matcher:empty() then
+    return
+  end
+  local positions_by_field = matcher:positions(item)
+  if not positions_by_field then
+    return
+  end
+  for field, positions in pairs(positions_by_field) do
+    if type(positions) == "table" and #positions > 0 then
+      if field == "text" then
+        local segments = item._sb_segments
+        if type(segments) == "table" and #segments > 0 then
+          for _, pos in ipairs(positions) do
+            local segment, offset = segment_for_position(segments, pos)
+            if segment and segment.field then
+              apply_field_match(item, segment.field, offset)
+            end
+          end
+        end
+      else
+        apply_field_match(item, field, positions[1])
+      end
+    end
+  end
 end
 
 ---@param picker snacks.Picker|nil
@@ -1407,6 +1552,25 @@ function M.bibtex(opts)
   local origin_win = vim.api.nvim_get_current_win()
   local mode_info = vim.api.nvim_get_mode()
   local origin_mode = mode_info and mode_info.mode or nil
+  local matcher_opts = {}
+  local user_matcher_on_match
+  if picker_opts_user and picker_opts_user.matcher then
+    local user_matcher = vim.deepcopy(picker_opts_user.matcher)
+    user_matcher_on_match = user_matcher.on_match
+    user_matcher.on_match = nil
+    matcher_opts = vim.tbl_deep_extend("force", matcher_opts, user_matcher)
+    picker_opts_user.matcher = nil
+  end
+  local existing_on_match = matcher_opts.on_match
+  matcher_opts.on_match = function(matcher, item)
+    update_match_priority(matcher, item)
+    if existing_on_match then
+      existing_on_match(matcher, item)
+    end
+    if user_matcher_on_match then
+      user_matcher_on_match(matcher, item)
+    end
+  end
   local user_on_show
   if picker_opts_user and picker_opts_user.on_show then
     user_on_show = picker_opts_user.on_show
@@ -1423,6 +1587,7 @@ function M.bibtex(opts)
     actions = actions,
     preview = "preview",
     sort = make_match_sorter(cfg),
+    matcher = matcher_opts,
     win = {
       list = {
         keys = list_keys,

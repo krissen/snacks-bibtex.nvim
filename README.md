@@ -71,7 +71,8 @@ require("snacks-bibtex").setup({
   depth = 1,                        -- recursion depth for project search (nil for unlimited)
   files = nil,                      -- explicit list of project-local bib files
   global_files = {},                -- list of additional bib files
-  search_fields = { "author", "title", "year", "journal", "journaltitle", "editor" },
+  search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
+  match_priority = { "author", "year", "title" }, -- field preference when ranking matches
   format = "%s",                    -- how keys are inserted with <CR>
   preview_format = "{{author}} ({{year}}), {{title}}",
   citation_format = "{{author}} ({{year}})", -- fallback text when no format template is available
@@ -92,7 +93,7 @@ require("snacks-bibtex").setup({
     { field = "year", direction = "asc" },      -- then year ascending
     { field = "source", direction = "asc" },    -- finally original BibTeX order
   },
-  match_sort = nil,                 -- optional: overrides search-time ordering (defaults to score + `sort`)
+  match_sort = nil,                 -- optional: overrides search-time ordering (defaults to score + `match_priority` + `sort`)
   locale = "en",                    -- preferred locale for textual formats
   citation_commands = {             -- toggle citation templates or add your own
     -- each entry: { command, template, description?, packages?, enabled? }
@@ -114,16 +115,21 @@ default `sort` configuration ranks entries by frecency (a blend of usage count a
 and finally by the order in which items appear in your BibTeX sources. This keeps frequently cited works at the top while still
 providing deterministic alphabetical fallbacks.
 
-When you start typing, the picker always favours the highest scoring matches before applying your tie-breakers. By default the
-`match_sort` rules expand to `{ { field = "score", direction = "desc" }, unpack(sort) }`, so score wins first, then frecency,
-author, year, and source order. Override `match_sort` to change that behaviour—for example `{ { field = "score", direction =
-"desc" }, { field = "recent", direction = "desc" } }` keeps the best matches first but prefers recently used references over
-older favourites.
+When you start typing, the picker favours the best scoring matches and then prioritises the fields you care about the most. By default the
+`match_sort` rules expand to `{ { field = "score", direction = "desc" }, { field = "match_priority" }, unpack(sort) }`, so score wins first,
+then matches on author, year, title, and the remaining search fields (in that order) before falling back to frecency, author, year, and
+source order. Override `match_sort` to change that behaviour—for example `{ { field = "score", direction = "desc" }, { field =
+"match_priority", direction = "asc" }, { field = "recent", direction = "desc" } }` keeps the best matches first but prefers recently used
+references over older favourites.
 
-You can tweak or replace the ordering by editing the `sort` list (used when the prompt is empty) and the `match_sort` list (used
-after you begin typing). Each rule accepts a `field` and a `direction` (`"asc"` or `"desc"`). Supported fields include `score`,
-`frecency`, `frequency`, `recent`, `author`, `title`, `journal`, `year`, `key`, `type`, `label`, `text`, `file`, and `source`
-(the original BibTeX order).
+The `match_priority` list mirrors `search_fields` by default, but you can reorder or trim it to favour different fields. Direct key matches
+always rank ahead of the configured fields, and accent-normalised values inherit the same priority as their original field, so typing
+`Tröskelbegrepp` will highlight entries stored as `Tr{"o}skelbegrepp` without losing relevance.
+
+You can tweak or replace the ordering by editing the `sort` list (used when the prompt is empty) and the `match_sort` list (used after you
+begin typing). Each rule accepts a `field` and a `direction` (`"asc"` or `"desc"`). Supported fields include `score`, `match_priority`,
+`match_field`, `match_offset`, `frecency`, `frequency`, `recent`, `author`, `title`, `journal`, `year`, `key`, `type`, `label`, `text`,
+`file`, and `source` (the original BibTeX order).
 
 ```lua
 require("snacks-bibtex").setup({
