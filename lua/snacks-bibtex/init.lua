@@ -1,6 +1,8 @@
 local config = require("snacks-bibtex.config")
 local parser = require("snacks-bibtex.parser")
 
+local sanitize_identifier = assert(config.sanitize_identifier, "snacks-bibtex.config is missing sanitize_identifier")
+
 local uv = vim.uv or vim.loop
 
 local M = {}
@@ -338,15 +340,6 @@ local function make_match_sorter(cfg)
   return function(a, b)
     return compare_with_rules(a, b, rules)
   end
-end
-
-local function sanitize_identifier(value)
-  if type(value) ~= "string" or value == "" then
-    return ""
-  end
-  local ident = value:gsub("\\", ""):gsub("[^%w]+", "_")
-  ident = ident:gsub("^_+", ""):gsub("_+$", "")
-  return ident ~= "" and ident:lower() or ""
 end
 
 ---@param opts? {silent?: boolean}

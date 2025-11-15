@@ -149,7 +149,7 @@ local function parse_entries(text, path)
         current.raw = raw
         local body = raw:match("@%w+%s*%b{}")
         if body then
-          local inner = body:match("%b{}");
+          local inner = body:match("%b{}")
           if inner then
             inner = inner:sub(2, -2)
             inner = inner:gsub("^%s*[^,%s]+%s*,", "", 1)

@@ -196,6 +196,9 @@ table.insert(cfg.citation_commands, {
 require("snacks-bibtex").setup(cfg)
 ```
 
+Use `require("snacks-bibtex.config").sanitize_identifier("My Custom Command")` to generate stable IDs for custom commands or
+formats when you need to reference them from mappings or defaults.
+
 You can also opt-in to specific commands by filtering the defaults:
 
 ```lua
@@ -248,6 +251,7 @@ require("snacks-bibtex").setup({
 The command name is always displayed, while descriptions, packages, and templates can be toggled on or off as needed.
 
 The command picker preview pane renders the highlighted command's output for the current entry so you can verify the exact cite string before inserting.
+All bundled templates render canonical snippets such as `\cite{key}` without extra whitespace inside the braces so inserted commands follow common LaTeX style guides out of the box.
 
 #### Bundled command catalogue
 

@@ -1,17 +1,5 @@
 local M = {}
 
----@class SnacksBibtexConfig
----@field depth integer|nil Directory recursion depth for local bib search
----@field files string[]|nil Explicit list of project-local bib files
----@field global_files string[]|nil List of global bib files (outside project)
----@field search_fields string[] Ordered list of fields to search (e.g. {"author","title","year","keywords"})
----@field format string Default format for inserting citation keys or labels
----@field preview_format string Template used to format the preview line(s)
----@field citation_format? string Template used when inserting formatted citations
----@field default_citation_format? string Identifier of the default citation format template
----@field citation_format_defaults? { in_text?: string, reference?: string } Default citation format identifiers per usage
----@field match_priority string[]|nil Ordered list of fields prioritised when ranking matches
----@field citation_command_picker? { title?: string, command?: boolean, description?: boolean, packages?: boolean, template?: boolean } Citation command picker presentation settings
 ---@class SnacksBibtexCitationCommand
 ---@field command string
 ---@field template string
@@ -29,13 +17,6 @@ local M = {}
 ---@field locale? string
 ---@field enabled? boolean
 
----@field mappings table<string, SnacksBibtexMapping>|nil Custom action mappings for the picker
----@field citation_commands SnacksBibtexCitationCommand[] Available citation templates
----@field citation_formats SnacksBibtexCitationFormat[] Available citation format templates
----@field locale string Preferred locale for textual formats
----@field sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil Sorting rules for the initial picker entries
----@field match_sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil Sorting rules applied when the query is non-empty
-
 ---@alias SnacksBibtexMapping string|fun(picker: snacks.Picker, item: snacks.picker.Item)|snacks.picker.Action.spec
 
 ---@alias SnacksBibtexResolvedConfig SnacksBibtexConfig
@@ -52,10 +33,31 @@ local defaults ---@type SnacksBibtexConfig
 ---@field default integer
 ---@field raw string[]
 
+---@class SnacksBibtexConfig
+---@field depth integer|nil Directory recursion depth for local bib search
+---@field files string[]|nil Explicit list of project-local bib files
+---@field global_files string[]|nil List of global bib files (outside project)
+---@field search_fields string[] Ordered list of fields to search (e.g. {"author","title","year","keywords"})
+---@field format string Default format for inserting citation keys or labels
+---@field preview_format string Template used to format the preview line(s)
+---@field citation_format? string Template used when inserting formatted citations
+---@field default_citation_format? string Identifier of the default citation format template
+---@field citation_format_defaults? { in_text?: string, reference?: string } Default citation format identifiers per usage
+---@field match_priority string[]|nil Ordered list of fields prioritised when ranking matches
+---@field citation_command_picker? { title?: string, command?: boolean, description?: boolean, packages?: boolean, template?: boolean } Citation command picker presentation settings
+---@field mappings table<string, SnacksBibtexMapping>|nil Custom action mappings for the picker
+---@field citation_commands SnacksBibtexCitationCommand[] Available citation templates
+---@field citation_formats SnacksBibtexCitationFormat[] Available citation format templates
+---@field locale string Preferred locale for textual formats
+---@field sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil Sorting rules for the initial picker entries
+---@field match_sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil Sorting rules applied when the query is non-empty
+
 local function deepcopy(tbl)
   return vim.deepcopy(tbl)
 end
 
+---@param value any
+---@return string|nil
 local function sanitize_identifier(value)
   if type(value) ~= "string" or value == "" then
     return nil
@@ -102,12 +104,12 @@ local function normalize_citation_commands(list)
 end
 
 local function normalize_citation_formats(list)
-  assign_ids(list, function(item)
-    return item.id or item.name or item.template
-  end, "format")
   if not list then
     return
   end
+  assign_ids(list, function(item)
+    return item.id or item.name or item.template
+  end, "format")
   for _, item in ipairs(list) do
     if type(item) == "table" then
       item.locale = item.locale or "en"
@@ -313,28 +315,28 @@ local function init_defaults()
       -- LaTeX / BibTeX
       {
         command = "\\cite",
-        template = "\\cite{ {{key}} }",
+        template = "\\cite{{{key}}}",
         description = "Generic citation (BibTeX/BibLaTeX)",
         packages = { "bibtex", "biblatex" },
         enabled = true,
       },
       {
         command = "\\Cite",
-        template = "\\Cite{ {{key}} }",
+        template = "\\Cite{{{key}}}",
         description = "Sentence-leading generic citation",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\cite*",
-        template = "\\cite*{ {{key}} }",
+        template = "\\cite*{{{key}}}",
         description = "Generic citation with full author list",
         packages = { "bibtex", "biblatex" },
         enabled = false,
       },
       {
         command = "\\Cite*",
-        template = "\\Cite*{ {{key}} }",
+        template = "\\Cite*{{{key}}}",
         description = "Sentence-leading generic citation (full list)",
         packages = "biblatex",
         enabled = false,
@@ -342,560 +344,560 @@ local function init_defaults()
       -- natbib
       {
         command = "\\citet",
-        template = "\\citet{ {{key}} }",
+        template = "\\citet{{{key}}}",
         description = "Textual citation (natbib)",
         packages = "natbib",
         enabled = true,
       },
       {
         command = "\\citet*",
-        template = "\\citet*{ {{key}} }",
+        template = "\\citet*{{{key}}}",
         description = "Textual citation with full author list",
         packages = "natbib",
         enabled = false,
       },
       {
         command = "\\Citet",
-        template = "\\Citet{ {{key}} }",
+        template = "\\Citet{{{key}}}",
         description = "Sentence-leading textual citation",
         packages = "natbib",
         enabled = false,
       },
       {
         command = "\\citep",
-        template = "\\citep{ {{key}} }",
+        template = "\\citep{{{key}}}",
         description = "Parenthetical citation (natbib)",
         packages = "natbib",
         enabled = true,
       },
       {
         command = "\\citep*",
-        template = "\\citep*{ {{key}} }",
+        template = "\\citep*{{{key}}}",
         description = "Parenthetical citation with full author list",
         packages = "natbib",
         enabled = false,
       },
       {
         command = "\\Citep",
-        template = "\\Citep{ {{key}} }",
+        template = "\\Citep{{{key}}}",
         description = "Sentence-leading parenthetical citation",
         packages = "natbib",
         enabled = false,
       },
       {
         command = "\\citealt",
-        template = "\\citealt{ {{key}} }",
+        template = "\\citealt{{{key}}}",
         description = "Textual citation without parentheses",
         packages = "natbib",
         enabled = false,
       },
       {
         command = "\\citealt*",
-        template = "\\citealt*{ {{key}} }",
+        template = "\\citealt*{{{key}}}",
         description = "Textual citation without parentheses (full list)",
         packages = "natbib",
         enabled = false,
       },
       {
         command = "\\Citealt",
-        template = "\\Citealt{ {{key}} }",
+        template = "\\Citealt{{{key}}}",
         description = "Capitalized textual citation without parentheses",
         packages = "natbib",
         enabled = false,
       },
       {
         command = "\\citealp",
-        template = "\\citealp{ {{key}} }",
+        template = "\\citealp{{{key}}}",
         description = "Parenthetical citation without outer parentheses",
         packages = "natbib",
         enabled = false,
       },
       {
         command = "\\citealp*",
-        template = "\\citealp*{ {{key}} }",
+        template = "\\citealp*{{{key}}}",
         description = "Parenthetical citation without outer parentheses (full list)",
         packages = "natbib",
         enabled = false,
       },
       {
         command = "\\Citealp",
-        template = "\\Citealp{ {{key}} }",
+        template = "\\Citealp{{{key}}}",
         description = "Capitalized citation without outer parentheses",
         packages = "natbib",
         enabled = false,
       },
       {
         command = "\\citeauthor",
-        template = "\\citeauthor{ {{key}} }",
+        template = "\\citeauthor{{{key}}}",
         description = "Author(s) only",
         packages = { "natbib", "biblatex" },
         enabled = true,
       },
       {
         command = "\\citeauthor*",
-        template = "\\citeauthor*{ {{key}} }",
+        template = "\\citeauthor*{{{key}}}",
         description = "Author(s) with full list",
         packages = { "natbib", "biblatex" },
         enabled = false,
       },
       {
         command = "\\Citeauthor",
-        template = "\\Citeauthor{ {{key}} }",
+        template = "\\Citeauthor{{{key}}}",
         description = "Sentence-leading author citation",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Citeauthor*",
-        template = "\\Citeauthor*{ {{key}} }",
+        template = "\\Citeauthor*{{{key}}}",
         description = "Sentence-leading author citation (full list)",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\citeyear",
-        template = "\\citeyear{ {{key}} }",
+        template = "\\citeyear{{{key}}}",
         description = "Year only",
         packages = { "natbib", "biblatex" },
         enabled = true,
       },
       {
         command = "\\citeyear*",
-        template = "\\citeyear*{ {{key}} }",
+        template = "\\citeyear*{{{key}}}",
         description = "Year with extra detail",
         packages = { "natbib", "biblatex" },
         enabled = false,
       },
       {
         command = "\\citeyearpar",
-        template = "\\citeyearpar{ {{key}} }",
+        template = "\\citeyearpar{{{key}}}",
         description = "Year in parentheses (natbib)",
         packages = "natbib",
         enabled = false,
       },
       {
         command = "\\citetitle",
-        template = "\\citetitle{ {{key}} }",
+        template = "\\citetitle{{{key}}}",
         description = "Work title",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\citetitle*",
-        template = "\\citetitle*{ {{key}} }",
+        template = "\\citetitle*{{{key}}}",
         description = "Work title without disambiguation",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Citetitle",
-        template = "\\Citetitle{ {{key}} }",
+        template = "\\Citetitle{{{key}}}",
         description = "Sentence-leading work title",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Citetitle*",
-        template = "\\Citetitle*{ {{key}} }",
+        template = "\\Citetitle*{{{key}}}",
         description = "Sentence-leading work title (no disambiguation)",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\citeurl",
-        template = "\\citeurl{ {{key}} }",
+        template = "\\citeurl{{{key}}}",
         description = "URL only",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\citeurldate",
-        template = "\\citeurldate{ {{key}} }",
+        template = "\\citeurldate{{{key}}}",
         description = "URL access date",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\citedate",
-        template = "\\citedate{ {{key}} }",
+        template = "\\citedate{{{key}}}",
         description = "Date field",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\citedate*",
-        template = "\\citedate*{ {{key}} }",
+        template = "\\citedate*{{{key}}}",
         description = "Date field (untruncated)",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Citedate",
-        template = "\\Citedate{ {{key}} }",
+        template = "\\Citedate{{{key}}}",
         description = "Sentence-leading date field",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Citedate*",
-        template = "\\Citedate*{ {{key}} }",
+        template = "\\Citedate*{{{key}}}",
         description = "Sentence-leading date field (untruncated)",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\parencite",
-        template = "\\parencite{ {{key}} }",
+        template = "\\parencite{{{key}}}",
         description = "Parenthetical citation (biblatex)",
         packages = "biblatex",
         enabled = true,
       },
       {
         command = "\\Parencite",
-        template = "\\Parencite{ {{key}} }",
+        template = "\\Parencite{{{key}}}",
         description = "Sentence-leading parenthetical citation",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\parencite*",
-        template = "\\parencite*{ {{key}} }",
+        template = "\\parencite*{{{key}}}",
         description = "Parenthetical citation (full list)",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Parencite*",
-        template = "\\Parencite*{ {{key}} }",
+        template = "\\Parencite*{{{key}}}",
         description = "Sentence-leading parenthetical citation (full list)",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\footcite",
-        template = "\\footcite{ {{key}} }",
+        template = "\\footcite{{{key}}}",
         description = "Footnote citation",
         packages = "biblatex",
         enabled = true,
       },
       {
         command = "\\Footcite",
-        template = "\\Footcite{ {{key}} }",
+        template = "\\Footcite{{{key}}}",
         description = "Sentence-leading footnote citation",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\footcite*",
-        template = "\\footcite*{ {{key}} }",
+        template = "\\footcite*{{{key}}}",
         description = "Footnote citation (full list)",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Footcite*",
-        template = "\\Footcite*{ {{key}} }",
+        template = "\\Footcite*{{{key}}}",
         description = "Sentence-leading footnote citation (full list)",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\footcitetext",
-        template = "\\footcitetext{ {{key}} }",
+        template = "\\footcitetext{{{key}}}",
         description = "Footnote citation without marker",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\footfullcite",
-        template = "\\footfullcite{ {{key}} }",
+        template = "\\footfullcite{{{key}}}",
         description = "Full footnote citation",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\textcite",
-        template = "\\textcite{ {{key}} }",
+        template = "\\textcite{{{key}}}",
         description = "Textual citation (biblatex)",
         packages = "biblatex",
         enabled = true,
       },
       {
         command = "\\Textcite",
-        template = "\\Textcite{ {{key}} }",
+        template = "\\Textcite{{{key}}}",
         description = "Sentence-leading textual citation",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\textcite*",
-        template = "\\textcite*{ {{key}} }",
+        template = "\\textcite*{{{key}}}",
         description = "Textual citation (full list)",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Textcite*",
-        template = "\\Textcite*{ {{key}} }",
+        template = "\\Textcite*{{{key}}}",
         description = "Sentence-leading textual citation (full list)",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\smartcite",
-        template = "\\smartcite{ {{key}} }",
+        template = "\\smartcite{{{key}}}",
         description = "Auto style citation",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Smartcite",
-        template = "\\Smartcite{ {{key}} }",
+        template = "\\Smartcite{{{key}}}",
         description = "Sentence-leading auto citation",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\smartcite*",
-        template = "\\smartcite*{ {{key}} }",
+        template = "\\smartcite*{{{key}}}",
         description = "Auto style citation (full list)",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Smartcite*",
-        template = "\\Smartcite*{ {{key}} }",
+        template = "\\Smartcite*{{{key}}}",
         description = "Sentence-leading auto citation (full list)",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\autocite",
-        template = "\\autocite{ {{key}} }",
+        template = "\\autocite{{{key}}}",
         description = "Context sensitive citation",
         packages = "biblatex",
         enabled = true,
       },
       {
         command = "\\Autocite",
-        template = "\\Autocite{ {{key}} }",
+        template = "\\Autocite{{{key}}}",
         description = "Sentence-leading context citation",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\autocite*",
-        template = "\\autocite*{ {{key}} }",
+        template = "\\autocite*{{{key}}}",
         description = "Context citation (full list)",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Autocite*",
-        template = "\\Autocite*{ {{key}} }",
+        template = "\\Autocite*{{{key}}}",
         description = "Sentence-leading context citation (full list)",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\supercite",
-        template = "\\supercite{ {{key}} }",
+        template = "\\supercite{{{key}}}",
         description = "Superscript citation",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Supercite",
-        template = "\\Supercite{ {{key}} }",
+        template = "\\Supercite{{{key}}}",
         description = "Sentence-leading superscript citation",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\nocite",
-        template = "\\nocite{ {{key}} }",
+        template = "\\nocite{{{key}}}",
         description = "Add to bibliography only",
         packages = { "bibtex", "biblatex" },
         enabled = true,
       },
       {
         command = "\\fullcite",
-        template = "\\fullcite{ {{key}} }",
+        template = "\\fullcite{{{key}}}",
         description = "Full citation",
         packages = "biblatex",
         enabled = true,
       },
       {
         command = "\\volcite",
-        template = "\\volcite{ {{key}} }",
+        template = "\\volcite{{{key}}}",
         description = "Volume citation",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\pvolcite",
-        template = "\\pvolcite{ {{key}} }",
+        template = "\\pvolcite{{{key}}}",
         description = "Volume citation with pages",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\fvolcite",
-        template = "\\fvolcite{ {{key}} }",
+        template = "\\fvolcite{{{key}}}",
         description = "Volume citation with floors",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\svolcite",
-        template = "\\svolcite{ {{key}} }",
+        template = "\\svolcite{{{key}}}",
         description = "Supplementary volume citation",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\volcites",
-        template = "\\volcites{ {{key}} }",
+        template = "\\volcites{{{key}}}",
         description = "Multiple volume citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\pvolcites",
-        template = "\\pvolcites{ {{key}} }",
+        template = "\\pvolcites{{{key}}}",
         description = "Multiple volume citations with pages",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\fvolcites",
-        template = "\\fvolcites{ {{key}} }",
+        template = "\\fvolcites{{{key}}}",
         description = "Multiple volume citations with floors",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\svolcites",
-        template = "\\svolcites{ {{key}} }",
+        template = "\\svolcites{{{key}}}",
         description = "Multiple supplementary volume citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\cites",
-        template = "\\cites{ {{key}} }",
+        template = "\\cites{{{key}}}",
         description = "Multiple citations",
         packages = { "natbib", "biblatex" },
         enabled = false,
       },
       {
         command = "\\Cites",
-        template = "\\Cites{ {{key}} }",
+        template = "\\Cites{{{key}}}",
         description = "Sentence-leading multiple citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\parencites",
-        template = "\\parencites{ {{key}} }",
+        template = "\\parencites{{{key}}}",
         description = "Multiple parenthetical citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Parencites",
-        template = "\\Parencites{ {{key}} }",
+        template = "\\Parencites{{{key}}}",
         description = "Sentence-leading multiple parenthetical citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\footcites",
-        template = "\\footcites{ {{key}} }",
+        template = "\\footcites{{{key}}}",
         description = "Multiple footnote citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Footcites",
-        template = "\\Footcites{ {{key}} }",
+        template = "\\Footcites{{{key}}}",
         description = "Sentence-leading multiple footnote citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\textcites",
-        template = "\\textcites{ {{key}} }",
+        template = "\\textcites{{{key}}}",
         description = "Multiple textual citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Textcites",
-        template = "\\Textcites{ {{key}} }",
+        template = "\\Textcites{{{key}}}",
         description = "Sentence-leading multiple textual citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\smartcites",
-        template = "\\smartcites{ {{key}} }",
+        template = "\\smartcites{{{key}}}",
         description = "Multiple auto style citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Smartcites",
-        template = "\\Smartcites{ {{key}} }",
+        template = "\\Smartcites{{{key}}}",
         description = "Sentence-leading multiple auto style citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\autocites",
-        template = "\\autocites{ {{key}} }",
+        template = "\\autocites{{{key}}}",
         description = "Multiple context citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Autocites",
-        template = "\\Autocites{ {{key}} }",
+        template = "\\Autocites{{{key}}}",
         description = "Sentence-leading multiple context citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\supercites",
-        template = "\\supercites{ {{key}} }",
+        template = "\\supercites{{{key}}}",
         description = "Multiple superscript citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\Supercites",
-        template = "\\Supercites{ {{key}} }",
+        template = "\\Supercites{{{key}}}",
         description = "Sentence-leading multiple superscript citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\nocites",
-        template = "\\nocites{ {{key}} }",
+        template = "\\nocites{{{key}}}",
         description = "Multiple bibliography-only entries",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\fullcites",
-        template = "\\fullcites{ {{key}} }",
+        template = "\\fullcites{{{key}}}",
         description = "Multiple full citations",
         packages = "biblatex",
         enabled = false,
       },
       {
         command = "\\footfullcites",
-        template = "\\footfullcites{ {{key}} }",
+        template = "\\footfullcites{{{key}}}",
         description = "Multiple full footnote citations",
         packages = "biblatex",
         enabled = false,
@@ -1000,5 +1002,10 @@ function M.resolve(opts)
   apply_match_priority(merged)
   return merged
 end
+
+---Expose the identifier normaliser so callers extending commands or formats can
+---reuse snacks-bibtex's naming rules.
+---@type fun(value: any): string|nil
+M.sanitize_identifier = sanitize_identifier
 
 return M
