@@ -8,15 +8,29 @@ local M = {}
 ---@field format string               # default format for inserting citation keys / labels
 ---@field preview_format string       # how to format the preview line(s)
 ---@field citation_format? string     # template used when inserting formatted citations
+---@field default_citation_format? string  # id of the default citation format template
+---@field citation_format_defaults? { in_text?: string, reference?: string }
 ---@class SnacksBibtexCitationCommand
 ---@field command string
 ---@field template string
 ---@field description? string
 ---@field packages? string|string[]
 ---@field enabled? boolean
+---@field id? string
+
+---@class SnacksBibtexCitationFormat
+---@field id string
+---@field name string
+---@field template string
+---@field description? string
+---@field category? "in_text"|"reference"|string
+---@field locale? string
+---@field enabled? boolean
 
 ---@field mappings table<string, SnacksBibtexMapping>|nil  # custom action mappings for the picker
 ---@field citation_commands SnacksBibtexCitationCommand[]  # available citation templates
+---@field citation_formats SnacksBibtexCitationFormat[]    # available citation format templates
+---@field locale string                                    # preferred locale for textual formats
 
 ---@alias SnacksBibtexMapping string|fun(picker: snacks.Picker, item: snacks.picker.Item)|snacks.picker.Action.spec
 
@@ -24,6 +38,65 @@ local defaults ---@type SnacksBibtexConfig
 
 local function deepcopy(tbl)
   return vim.deepcopy(tbl)
+end
+
+local function sanitize_identifier(value)
+  if type(value) ~= "string" or value == "" then
+    return nil
+  end
+  local ident = value:gsub("\\", ""):gsub("[^%w]+", "_")
+  ident = ident:gsub("^_+", ""):gsub("_+$", "")
+  if ident == "" then
+    return nil
+  end
+  return ident:lower()
+end
+
+---@param list table[]|nil
+---@param get_source fun(item: table): string|nil
+---@param prefix string
+local function assign_ids(list, get_source, prefix)
+  if not list then
+    return
+  end
+  local seen = {} ---@type table<string, boolean>
+  for index, item in ipairs(list) do
+    if type(item) == "table" then
+      local id = item.id
+      if not id then
+        id = sanitize_identifier(get_source(item) or "")
+      end
+      if not id or seen[id] then
+        local suffix = index
+        repeat
+          id = ("%s_%d"):format(prefix, suffix)
+          suffix = suffix + 1
+        until not seen[id]
+      end
+      item.id = id
+      seen[id] = true
+    end
+  end
+end
+
+local function normalize_citation_commands(list)
+  assign_ids(list, function(item)
+    return item.command or item.template
+  end, "command")
+end
+
+local function normalize_citation_formats(list)
+  assign_ids(list, function(item)
+    return item.id or item.name or item.template
+  end, "format")
+  if not list then
+    return
+  end
+  for _, item in ipairs(list) do
+    if type(item) == "table" then
+      item.locale = item.locale or "en"
+    end
+  end
 end
 
 local function normalize_files(files)
@@ -54,6 +127,12 @@ local function init_defaults()
     format = "@%s",
     preview_format = "{{author}} ({{year}}), {{title}}",
     citation_format = "{{author}} ({{year}})",
+    default_citation_format = "apa7_in_text",
+    citation_format_defaults = {
+      in_text = "apa7_in_text",
+      reference = "apa7_reference",
+    },
+    locale = "en",
     mappings = {},
     citation_commands = {
       -- LaTeX / BibTeX
@@ -647,7 +726,56 @@ local function init_defaults()
         enabled = false,
       },
     },
+    citation_formats = {
+      {
+        id = "apa7_in_text",
+        name = "APA 7 (in-text, English)",
+        template = "({{author}}, {{year}})",
+        description = "APA 7th edition in-text citation",
+        category = "in_text",
+        locale = "en",
+        enabled = true,
+      },
+      {
+        id = "apa7_reference",
+        name = "APA 7 (reference list, English)",
+        template = "{{author}} ({{year}}). {{title}}. {{journal}}.",
+        description = "APA 7th edition reference entry",
+        category = "reference",
+        locale = "en",
+        enabled = true,
+      },
+      {
+        id = "harvard_in_text",
+        name = "Harvard (in-text, English)",
+        template = "{{author}} {{year}}",
+        description = "Harvard style in-text citation",
+        category = "in_text",
+        locale = "en",
+        enabled = false,
+      },
+      {
+        id = "harvard_reference",
+        name = "Harvard (reference list, English)",
+        template = "{{author}}. {{year}}. {{title}}. {{journal}}.",
+        description = "Harvard style reference entry",
+        category = "reference",
+        locale = "en",
+        enabled = false,
+      },
+      {
+        id = "oxford_reference",
+        name = "Oxford (reference list, English)",
+        template = "{{author}}, {{title}} ({{publisher}}, {{year}})",
+        description = "Oxford style bibliography entry",
+        category = "reference",
+        locale = "en",
+        enabled = false,
+      },
+    },
   }
+  normalize_citation_commands(defaults.citation_commands)
+  normalize_citation_formats(defaults.citation_formats)
   return defaults
 end
 
@@ -663,6 +791,8 @@ function M.setup(opts)
   local merged = vim.tbl_deep_extend("force", deepcopy(defaults), opts)
   merged.files = normalize_files(merged.files)
   merged.global_files = normalize_files(merged.global_files) or {}
+  normalize_citation_commands(merged.citation_commands)
+  normalize_citation_formats(merged.citation_formats)
   options = merged
   return deepcopy(options)
 end
@@ -682,6 +812,8 @@ function M.resolve(opts)
   merged.files = normalize_files(merged.files) or merged.files
   merged.global_files = normalize_files(merged.global_files) or merged.global_files
   merged.global_files = merged.global_files or {}
+  normalize_citation_commands(merged.citation_commands)
+  normalize_citation_formats(merged.citation_formats)
   return merged
 end
 

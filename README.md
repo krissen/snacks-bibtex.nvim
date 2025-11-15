@@ -9,6 +9,7 @@ Scan local and global `*.bib` files, preview entries, and insert citation keys o
 - Search over configurable fields (author, title, year, …).
 - Rich preview rendered directly from the BibTeX entry.
 - Ready-made actions for inserting keys, full entries, formatted citations, or individual fields.
+- Quick shortcuts for `\cite`, `\citep`, `\citet`, and formatted APA/Harvard/Oxford references (with pickers for the full catalogues).
 - Customisable mappings and picker options via Lua.
 
 ## Installation
@@ -49,7 +50,13 @@ Key | Action
 ----|-------
 `<CR>` | Insert the citation key (formatted with `config.format`, default `@%s`).
 `<C-e>` | Insert the full BibTeX entry at the cursor.
-`<C-c>` | Open a citation command picker covering BibTeX, natbib, and BibLaTeX templates.
+`<C-a>` | Insert `\cite{<key>}` (generic BibTeX/BibLaTeX citation).
+`<C-p>` | Insert `\citep{<key>}` (natbib parenthetical citation).
+`<C-t>` | Insert `\citet{<key>}` (natbib textual citation).
+`<C-c>` | Open the citation command picker covering the full BibTeX/natbib/BibLaTeX catalogue.
+`<C-s>` | Insert the default in-text citation format (APA 7 in English by default).
+`<C-r>` | Insert the default reference-list citation format (APA 7 in English by default).
+`<C-y>` | Open the citation format picker (APA, Harvard, Oxford templates included).
 `<C-f>` | Open a secondary picker to choose and insert a single field value.
 
 You can override keymaps globally via `require("snacks-bibtex").setup({ mappings = { ... } })` or per picker call by passing `mappings` to `bibtex({ ... })`.
@@ -64,12 +71,22 @@ require("snacks-bibtex").setup({
   search_fields = { "author", "title", "year", "journal", "journaltitle", "editor" },
   format = "@%s",                   -- how keys are inserted with <CR>
   preview_format = "{{author}} ({{year}}), {{title}}",
-  citation_format = "{{author}} ({{year}})",
+  citation_format = "{{author}} ({{year}})", -- fallback text when no format template is available
+  default_citation_format = "apa7_in_text",   -- id from `citation_formats` used as the fallback
+  citation_format_defaults = {
+    in_text = "apa7_in_text",       -- default for <C-s>
+    reference = "apa7_reference",   -- default for <C-r>
+  },
+  locale = "en",                    -- preferred locale for textual formats
   citation_commands = {             -- toggle citation templates or add your own
     -- each entry: { command, template, description?, packages?, enabled? }
   },
+  citation_formats = {
+    -- each entry: { id, name, template, description?, category?, locale?, enabled? }
+  },
   mappings = {                      -- customise picker keymaps / actions
-    -- ["<C-y>"] = function(picker, item) ... end,
+    -- use { kind = "citation_command", command = "\\autocite" } to remap quick cite keys
+    -- use { kind = "citation_format", id = "apa7_reference" } for quick format slots
   },
 })
 ```
@@ -128,6 +145,26 @@ end
 require("snacks-bibtex").setup(cfg)
 ```
 
+#### Quick command shortcuts
+
+The picker binds the most common citation commands out of the box:
+
+- `<C-a>` → `\cite`
+- `<C-p>` → `\citep`
+- `<C-t>` → `\citet`
+
+Remap or add shortcuts through the `mappings` table using `kind = "citation_command"`:
+
+```lua
+require("snacks-bibtex").setup({
+  mappings = {
+    ["<C-a>"] = { kind = "citation_command", command = "\\autocite" },
+    ["<C-p>"] = false, -- disable natbib parenthetical cite if unused
+    ["<M-f>"] = { kind = "citation_command", command = "\\footcite" },
+  },
+})
+```
+
 #### Bundled command catalogue
 
 The plugin ships ready-to-enable templates for every `\cite`-family command provided by BibTeX, natbib, and BibLaTeX. Commands are grouped below for convenience:
@@ -136,6 +173,65 @@ The plugin ships ready-to-enable templates for every `\cite`-family command prov
 - **natbib**: `\citet`, `\citet*`, `\Citet`, `\citep`, `\citep*`, `\Citep`, `\citealt`, `\citealt*`, `\Citealt`, `\citealp`, `\citealp*`, `\Citealp`, `\citeauthor`, `\citeauthor*`, `\citeyear`, `\citeyear*`, `\citeyearpar`, `\cites`.
 - **BibLaTeX single-entry**: `\cite`, `\cite*`, `\Cite`, `\Cite*`, `\parencite`, `\parencite*`, `\Parencite`, `\Parencite*`, `\footcite`, `\footcite*`, `\Footcite`, `\Footcite*`, `\footcitetext`, `\footfullcite`, `\textcite`, `\textcite*`, `\Textcite`, `\Textcite*`, `\smartcite`, `\smartcite*`, `\Smartcite`, `\Smartcite*`, `\autocite`, `\autocite*`, `\Autocite`, `\Autocite*`, `\supercite`, `\Supercite`, `\fullcite`, `\nocite`, `\citeauthor`, `\citeauthor*`, `\Citeauthor`, `\Citeauthor*`, `\citetitle`, `\citetitle*`, `\Citetitle`, `\Citetitle*`, `\citeyear`, `\citeyear*`, `\citeurl`, `\citeurldate`, `\citedate`, `\citedate*`, `\Citedate`, `\Citedate*`, `\volcite`, `\pvolcite`, `\fvolcite`, `\svolcite`.
 - **BibLaTeX multi-entry**: `\cites`, `\Cites`, `\parencites`, `\Parencites`, `\footcites`, `\Footcites`, `\textcites`, `\Textcites`, `\smartcites`, `\Smartcites`, `\autocites`, `\Autocites`, `\supercites`, `\Supercites`, `\nocites`, `\fullcites`, `\footfullcites`, `\volcites`, `\pvolcites`, `\fvolcites`, `\svolcites`.
+
+### Citation formats
+
+`<C-s>` and `<C-r>` insert ready-made textual reference templates. `<C-y>` opens a picker listing every enabled format. The defaults focus on APA 7 (enabled) plus Harvard and Oxford (disabled) in English.
+
+Enable or extend formats through `citation_formats`:
+
+```lua
+local cfg = require("snacks-bibtex.config").get()
+
+-- keep the bundled APA 7 entries, but enable Harvard and add a Swedish variant
+for _, format in ipairs(cfg.citation_formats) do
+  if format.id:find("harvard", 1, true) then
+    format.enabled = true
+  end
+end
+
+table.insert(cfg.citation_formats, {
+  id = "apa7_in_text_sv",
+  name = "APA 7 (in-text, Swedish)",
+  template = "({{author}}, {{year}})",
+  description = "APA 7th edition in-text citation (Swedish)",
+  category = "in_text",
+  locale = "sv",
+  enabled = true,
+})
+
+cfg.locale = "sv"
+cfg.citation_format_defaults = {
+  in_text = "apa7_in_text_sv",
+  reference = "apa7_reference",
+}
+
+cfg.mappings = cfg.mappings or {}
+cfg.mappings["<C-s>"] = { kind = "citation_format", id = "apa7_in_text_sv" }
+
+require("snacks-bibtex").setup(cfg)
+```
+
+To disable unwanted templates, set `enabled = false` or remove them entirely. You can also create a clean slate:
+
+```lua
+require("snacks-bibtex").setup({
+  citation_formats = {
+    {
+      id = "oxford_reference",
+      name = "Oxford (reference list)",
+      template = "{{author}}, {{title}} ({{publisher}}, {{year}})",
+      category = "reference",
+      locale = "en",
+      enabled = true,
+    },
+  },
+  citation_format_defaults = {
+    in_text = "apa7_in_text",
+    reference = "oxford_reference",
+  },
+})
+```
 
 Call `bibtex()` with overrides for a single invocation:
 
