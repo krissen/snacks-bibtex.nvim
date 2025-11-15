@@ -8,6 +8,7 @@ local M = {}
 ---@field fields table<string, string>
 ---@field file string
 ---@field raw string
+---@field order integer        # stable order based on appearance across all sources
 
 local function read_file(path)
   local fd = uv.fs_open(path, "r", 438)
@@ -208,13 +209,18 @@ function M.load_entries(cfg)
 
   local entries = {}
   local errors = {}
+  local order = 0
   for _, path in ipairs(files) do
     local text, err = read_file(path)
     if not text then
       errors[#errors + 1] = err or ("Failed to read %s"):format(path)
     else
       local parsed = parse_entries(text, path)
-      vim.list_extend(entries, parsed)
+      for _, entry in ipairs(parsed) do
+        order = order + 1
+        entry.order = order
+        entries[#entries + 1] = entry
+      end
     end
   end
   return entries, errors

@@ -1,7 +1,303 @@
 local config = require("snacks-bibtex.config")
 local parser = require("snacks-bibtex.parser")
 
+local uv = vim.uv or vim.loop
+
 local M = {}
+
+local history ---@type table<string, { count: integer, last: integer }>
+local history_loaded = false
+local history_dirty = false
+
+local insert_modes = {
+  i = true,
+  ic = true,
+  ix = true,
+}
+
+local replace_modes = {
+  R = true,
+  Rc = true,
+  Rx = true,
+}
+
+---@return string|nil
+local function history_path()
+  local ok, data_dir = pcall(vim.fn.stdpath, "data")
+  if not ok or not data_dir or data_dir == "" then
+    return nil
+  end
+  return vim.fs.joinpath(data_dir, "snacks-bibtex", "history.json")
+end
+
+---@param value any
+---@return { count: integer, last: integer }|nil
+local function sanitize_history_record(value)
+  if type(value) ~= "table" then
+    return nil
+  end
+  local count = tonumber(value.count) or 0
+  if count < 0 then
+    count = 0
+  end
+  local last = tonumber(value.last) or 0
+  if last < 0 then
+    last = 0
+  end
+  return { count = math.floor(count), last = math.floor(last) }
+end
+
+local function ensure_history_loaded()
+  if history_loaded then
+    return history
+  end
+  history_loaded = true
+  history = {}
+  local path = history_path()
+  if not path then
+    return history
+  end
+  local stat = uv.fs_stat(path)
+  if not stat or stat.type ~= "file" then
+    return history
+  end
+  local fd = uv.fs_open(path, "r", 438)
+  if not fd then
+    return history
+  end
+  local data = uv.fs_read(fd, stat.size, 0)
+  uv.fs_close(fd)
+  if not data then
+    return history
+  end
+  local ok, decoded = pcall(vim.json.decode, data)
+  if not ok or type(decoded) ~= "table" then
+    return history
+  end
+  for key, value in pairs(decoded) do
+    if type(key) == "string" then
+      local record = sanitize_history_record(value)
+      if record then
+        history[key] = record
+      end
+    end
+  end
+  return history
+end
+
+local function get_history()
+  return ensure_history_loaded()
+end
+
+local function save_history()
+  if not history_dirty then
+    return
+  end
+  local path = history_path()
+  if not path then
+    return
+  end
+  local dir = vim.fs.dirname(path)
+  if dir and dir ~= "" then
+    pcall(vim.fn.mkdir, dir, "p")
+  end
+  local ok, encoded = pcall(vim.json.encode, history or {})
+  if not ok or type(encoded) ~= "string" then
+    return
+  end
+  local fd = uv.fs_open(path, "w", 420)
+  if not fd then
+    return
+  end
+  uv.fs_write(fd, encoded, 0)
+  uv.fs_close(fd)
+  history_dirty = false
+end
+
+---@param key string|nil
+local function record_entry_usage(key)
+  if not key or key == "" then
+    return
+  end
+  local store = get_history()
+  local record = store[key]
+  if not record then
+    record = { count = 0, last = 0 }
+    store[key] = record
+  end
+  record.count = math.max(0, (tonumber(record.count) or 0)) + 1
+  record.last = os.time()
+  history_dirty = true
+  save_history()
+end
+
+---@param key string|nil
+---@return { count: integer, last: integer }|nil
+local function get_history_entry(key)
+  if not key or key == "" then
+    return nil
+  end
+  local store = get_history()
+  local record = store[key]
+  if not record then
+    return nil
+  end
+  return {
+    count = math.max(0, tonumber(record.count) or 0),
+    last = math.max(0, tonumber(record.last) or 0),
+  }
+end
+
+---@param record { count: integer, last: integer }|nil
+---@param now integer
+---@return number
+local function compute_frecency(record, now)
+  if not record then
+    return 0
+  end
+  local count = math.max(0, tonumber(record.count) or 0)
+  local last = math.max(0, tonumber(record.last) or 0)
+  local recency = 0
+  if last > 0 then
+    local age = now - last
+    if age < 0 then
+      age = 0
+    end
+    recency = math.max(0, 1000000 - age)
+  end
+  return (count * 1000000) + recency
+end
+
+---@param value any
+---@return string|nil
+local function normalize_sort_string(value)
+  if type(value) == "number" then
+    value = tostring(value)
+  end
+  if type(value) ~= "string" then
+    return nil
+  end
+  local trimmed = vim.trim(value)
+  if trimmed == "" then
+    return nil
+  end
+  return trimmed:lower()
+end
+
+---@param fields table<string, string>
+---@return integer|nil
+local function extract_year(fields)
+  local candidate = fields.year or fields.date
+  if type(candidate) == "number" then
+    return math.floor(candidate)
+  end
+  if type(candidate) ~= "string" then
+    return nil
+  end
+  local year = candidate:match("%d%d%d%d")
+  if year then
+    return tonumber(year)
+  end
+  return nil
+end
+
+---@param item table
+---@param field string
+---@return any
+local function get_sort_value(item, field)
+  field = field:lower()
+  local fields = item.fields or (item.entry and item.entry.fields) or {}
+  if field == "frecency" then
+    return item.frecency or 0
+  elseif field == "frequency" then
+    local record = item.history
+    return record and record.count or 0
+  elseif field == "recent" or field == "recency" then
+    local record = item.history
+    return record and record.last or 0
+  elseif field == "author" then
+    return normalize_sort_string(fields.author) or normalize_sort_string(fields.editor)
+  elseif field == "title" then
+    return normalize_sort_string(fields.title)
+  elseif field == "journal" or field == "journaltitle" then
+    return normalize_sort_string(fields.journal or fields.journaltitle)
+  elseif field == "year" then
+    return extract_year(fields)
+  elseif field == "key" then
+    return normalize_sort_string(item.key)
+  elseif field == "type" then
+    return normalize_sort_string(item.type)
+  elseif field == "file" then
+    return normalize_sort_string(item.file)
+  elseif field == "source" or field == "order" then
+    return item.order or (item.entry and item.entry.order) or 0
+  end
+  return nil
+end
+
+---@param a any
+---@param b any
+---@return integer
+local function compare_values(a, b)
+  if a == b then
+    return 0
+  end
+  if a == nil then
+    return 1
+  end
+  if b == nil then
+    return -1
+  end
+  local ta, tb = type(a), type(b)
+  if ta == "number" and tb == "number" then
+    if a == b then
+      return 0
+    end
+    return a < b and -1 or 1
+  end
+  local sa = normalize_sort_string(a) or tostring(a)
+  local sb = normalize_sort_string(b) or tostring(b)
+  if sa == sb then
+    return 0
+  end
+  return sa < sb and -1 or 1
+end
+
+---@param items table[]
+---@param cfg SnacksBibtexResolvedConfig
+local function apply_sort(items, cfg)
+  local rules = cfg.sort or {}
+  if vim.tbl_isempty(rules) then
+    return
+  end
+  table.sort(items, function(a, b)
+    for _, rule in ipairs(rules) do
+      if rule.field and rule.field ~= "" then
+        local va = get_sort_value(a, rule.field)
+        local vb = get_sort_value(b, rule.field)
+        local cmp = compare_values(va, vb)
+        if cmp ~= 0 then
+          if rule.direction == "desc" then
+            return cmp > 0
+          else
+            return cmp < 0
+          end
+        end
+      end
+    end
+    local ao = a.order or (a.entry and a.entry.order) or 0
+    local bo = b.order or (b.entry and b.entry.order) or 0
+    if ao == bo then
+      local ak = normalize_sort_string(a.key) or ""
+      local bk = normalize_sort_string(b.key) or ""
+      if ak == bk then
+        return false
+      end
+      return ak < bk
+    end
+    return ao < bo
+  end)
+end
 
 local function sanitize_identifier(value)
   if type(value) ~= "string" or value == "" then
@@ -398,6 +694,7 @@ local function resolve_default_citation_template(cfg)
   return cfg.preview_format
 end
 
+---Open a citation command picker that applies templates and updates history.
 ---@param snacks snacks.picker
 ---@param entry SnacksBibtexEntry
 ---@param commands SnacksBibtexCitationCommand[]
@@ -470,6 +767,7 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, parent
         end
         local text = apply_citation_template(entry, item.command.template, resolve_default_citation_template(cfg))
         insert_text(parent_picker, text)
+        record_entry_usage(entry.key)
         picker:close()
         if close_parent then
           close_parent()
@@ -486,6 +784,7 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, parent
   })
 end
 
+---Open a citation format picker that applies templates and updates history.
 ---@param snacks snacks.picker
 ---@param entry SnacksBibtexEntry
 ---@param formats SnacksBibtexCitationFormat[]
@@ -538,6 +837,7 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, parent_p
         end
         local text = apply_citation_template(entry, item.format.template, resolve_default_citation_template(cfg))
         insert_text(parent_picker, text)
+        record_entry_usage(entry.key)
         picker:close()
         if close_parent then
           close_parent()
@@ -554,7 +854,12 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, parent_p
   })
 end
 
-local function make_item(entry, cfg)
+---Create a picker item enriched with history metadata for sorting.
+---@param entry SnacksBibtexEntry
+---@param cfg SnacksBibtexResolvedConfig
+---@param now integer
+---@return table
+local function make_item(entry, cfg, now)
   local fields = entry.fields or {}
   local search_parts = { entry.key }
   for _, name in ipairs(cfg.search_fields or {}) do
@@ -575,6 +880,7 @@ local function make_item(entry, cfg)
   if preview ~= entry.key then
     label = ("%s — %s"):format(entry.key, preview)
   end
+  local history_record = get_history_entry(entry.key)
   return {
     key = entry.key,
     type = entry.type,
@@ -582,6 +888,9 @@ local function make_item(entry, cfg)
     file = entry.file,
     raw = entry.raw,
     entry = entry,
+    order = entry.order or 0,
+    history = history_record,
+    frecency = compute_frecency(history_record, now),
     text = table.concat(search_parts, " · "),
     label = label,
     preview = {
@@ -599,8 +908,38 @@ local function to_lines(text)
   return lines
 end
 
+---@param picker snacks.Picker|nil
+---@param win integer
+local function restore_origin_mode(picker, win)
+  if not picker or not picker._snacks_bibtex_origin_mode then
+    return
+  end
+  local mode = picker._snacks_bibtex_origin_mode
+  if not insert_modes[mode] and not replace_modes[mode] then
+    return
+  end
+  vim.schedule(function()
+    if not vim.api.nvim_win_is_valid(win) then
+      return
+    end
+    vim.api.nvim_set_current_win(win)
+    local key
+    if insert_modes[mode] then
+      key = "a"
+    elseif replace_modes[mode] then
+      key = "R"
+    end
+    if not key then
+      return
+    end
+    local term = vim.api.nvim_replace_termcodes(key, true, false, true)
+    vim.api.nvim_feedkeys(term, "n", false)
+  end)
+end
+
 ---Insert `text` into the window where the picker was launched, falling back to the
----current picker main window when the origin is no longer available.
+---current picker main window when the origin is no longer available and restoring
+---the caller's editing mode when applicable.
 ---@param picker snacks.Picker
 ---@param text string
 local function insert_text(picker, text)
@@ -637,8 +976,13 @@ local function insert_text(picker, text)
     final_col = #lines[#lines]
   end
   vim.api.nvim_win_set_cursor(win, { final_row + 1, final_col })
+  restore_origin_mode(picker, win)
 end
 
+---Build a quick citation command action that records usage statistics.
+---@param cfg SnacksBibtexResolvedConfig
+---@param command_entry SnacksBibtexCitationCommand
+---@return fun(picker: snacks.Picker, item: table)
 local function make_quick_command_action(cfg, command_entry)
   return function(picker, item)
     if not item then
@@ -648,10 +992,15 @@ local function make_quick_command_action(cfg, command_entry)
     local fallback = resolve_default_citation_template(cfg)
     local text = apply_citation_template(entry, command_entry.template, fallback)
     insert_text(picker, text)
+    record_entry_usage(entry.key)
     picker:close()
   end
 end
 
+---Build a quick citation format action that records usage statistics.
+---@param cfg SnacksBibtexResolvedConfig
+---@param format_entry SnacksBibtexCitationFormat
+---@return fun(picker: snacks.Picker, item: table)
 local function make_quick_format_action(cfg, format_entry)
   return function(picker, item)
     if not item then
@@ -661,6 +1010,7 @@ local function make_quick_format_action(cfg, format_entry)
     local fallback = resolve_default_citation_template(cfg)
     local text = apply_citation_template(entry, format_entry.template, fallback)
     insert_text(picker, text)
+    record_entry_usage(entry.key)
     picker:close()
   end
 end
@@ -695,7 +1045,8 @@ local function default_mappings_for_cfg(cfg)
   return mappings
 end
 
----Create picker actions and ensure default confirmation inserts into the source buffer.
+---Create picker actions, ensure confirmation inserts into the source buffer, and
+---track entry usage for frecency sorting.
 ---@param snacks snacks.picker
 ---@param cfg SnacksBibtexResolvedConfig
 ---@return table<string, snacks.picker.Action.spec>
@@ -714,6 +1065,7 @@ local function make_actions(snacks, cfg)
       end
     end
     insert_text(picker, text)
+    record_entry_usage(item.key)
     picker:close()
   end
 
@@ -725,6 +1077,7 @@ local function make_actions(snacks, cfg)
       return
     end
     insert_text(picker, item.raw)
+    record_entry_usage(item.key)
     picker:close()
   end
 
@@ -738,6 +1091,7 @@ local function make_actions(snacks, cfg)
       local fallback_template = resolve_default_citation_template(cfg)
       local citation = apply_citation_template(entry, fallback_template, cfg.preview_format)
       insert_text(picker, citation)
+      record_entry_usage(entry.key)
       picker:close()
       return
     end
@@ -745,6 +1099,7 @@ local function make_actions(snacks, cfg)
       local fallback_template = resolve_default_citation_template(cfg)
       local citation = apply_citation_template(entry, commands[1].template, fallback_template)
       insert_text(picker, citation)
+      record_entry_usage(entry.key)
       picker:close()
       return
     end
@@ -764,6 +1119,7 @@ local function make_actions(snacks, cfg)
       local fallback_template = resolve_default_citation_template(cfg)
       local text = apply_citation_template(entry, fallback_template, cfg.preview_format)
       insert_text(picker, text)
+      record_entry_usage(entry.key)
       picker:close()
       return
     end
@@ -771,6 +1127,7 @@ local function make_actions(snacks, cfg)
       local fallback_template = resolve_default_citation_template(cfg)
       local text = apply_citation_template(entry, formats[1].template, fallback_template)
       insert_text(picker, text)
+      record_entry_usage(entry.key)
       picker:close()
       return
     end
@@ -802,6 +1159,7 @@ local function make_actions(snacks, cfg)
     end
     -- keep a reference to the original picker so field insertions target the source buffer
     local parent_picker = picker
+    local entry_key = item.key
     snacks.picker({
       title = "BibTeX fields",
       items = fields,
@@ -814,6 +1172,7 @@ local function make_actions(snacks, cfg)
             return
           end
           insert_text(parent_picker, field_item.value)
+          record_entry_usage(entry_key)
           field_picker:close()
         end,
       },
@@ -998,9 +1357,11 @@ function M.bibtex(opts)
   end
 
   local items = {}
+  local now = os.time()
   for _, entry in ipairs(entries) do
-    items[#items + 1] = make_item(entry, cfg)
+    items[#items + 1] = make_item(entry, cfg, now)
   end
+  apply_sort(items, cfg)
 
   local actions = make_actions(Snacks, cfg)
   local base_mappings = default_mappings_for_cfg(cfg)
@@ -1009,6 +1370,8 @@ function M.bibtex(opts)
   local list_keys, input_keys = build_keymaps(actions, mappings, cfg)
 
   local origin_win = vim.api.nvim_get_current_win()
+  local mode_info = vim.api.nvim_get_mode()
+  local origin_mode = mode_info and mode_info.mode or nil
   local user_on_show
   if picker_opts_user and picker_opts_user.on_show then
     user_on_show = picker_opts_user.on_show
@@ -1036,6 +1399,7 @@ function M.bibtex(opts)
       if origin_win and vim.api.nvim_win_is_valid(origin_win) then
         picker._snacks_bibtex_origin_win = origin_win
       end
+      picker._snacks_bibtex_origin_mode = origin_mode
     end,
   }, picker_opts_user or {})
 

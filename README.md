@@ -60,7 +60,7 @@ Key | Action
 `<C-y>` | Open the citation format picker (APA, Harvard, Oxford templates included).
 `<C-f>` | Open a secondary picker to choose and insert a single field value.
 
-`<CR>` works from both the search prompt and the results list, and snacks-bibtex overrides Snacks' default confirm action so Enter always inserts into the buffer you launched the picker from instead of opening the BibTeX source. All insertion shortcuts write into that original buffer and window, so trigger mappings can safely run from insert mode without jumping away.
+`<CR>` works from both the search prompt and the results list, and snacks-bibtex overrides Snacks' default confirm action so Enter always inserts into the buffer you launched the picker from instead of opening the BibTeX source. All insertion shortcuts write into that original buffer and window, and the picker restores your previous insert/replace mode so trigger mappings can safely run without leaving you in normal mode.
 
 You can override keymaps globally via `require("snacks-bibtex").setup({ mappings = { ... } })` or per picker call by passing `mappings` to `bibtex({ ... })`. Custom mappings are automatically applied to both the results list and the search prompt unless you provide explicit `mode` options.
 
@@ -86,6 +86,12 @@ require("snacks-bibtex").setup({
     description = true,              -- show human-readable descriptions
     template = false,                -- include the raw template text
   },
+  sort = {
+    { field = "frecency", direction = "desc" }, -- recently used entries first
+    { field = "author", direction = "asc" },    -- then author alphabetical
+    { field = "year", direction = "asc" },      -- then year ascending
+    { field = "source", direction = "asc" },    -- finally original BibTeX order
+  },
   locale = "en",                    -- preferred locale for textual formats
   citation_commands = {             -- toggle citation templates or add your own
     -- each entry: { command, template, description?, packages?, enabled? }
@@ -99,6 +105,30 @@ require("snacks-bibtex").setup({
   },
 })
 ```
+
+#### Sorting and frecency
+
+Every successful insertion updates a small history file at `vim.fn.stdpath("data") .. "/snacks-bibtex/history.json"`. The
+default `sort` configuration ranks entries by frecency (a blend of usage count and recent activity), then by author and year,
+and finally by the order in which items appear in your BibTeX sources. This keeps frequently cited works at the top while still
+providing deterministic alphabetical fallbacks.
+
+You can tweak or replace the ordering by editing the `sort` list. Each rule accepts a `field` and a `direction` (`"asc"` or
+`"desc"`). Supported fields include `frecency`, `frequency`, `recent`, `author`, `title`, `journal`, `year`, `key`, `type`,
+`file`, and `source` (the original BibTeX order).
+
+```lua
+require("snacks-bibtex").setup({
+  sort = {
+    { field = "author", direction = "asc" },
+    { field = "year", direction = "desc" },
+    { field = "title", direction = "asc" },
+  },
+})
+```
+
+Removing the `frecency` rule gives you a purely alphabetical picker; keeping it ensures the most frequently used entries float
+to the top automatically.
 
 ### Citation commands
 

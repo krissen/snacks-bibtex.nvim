@@ -32,10 +32,15 @@ local M = {}
 ---@field citation_commands SnacksBibtexCitationCommand[]  # available citation templates
 ---@field citation_formats SnacksBibtexCitationFormat[]    # available citation format templates
 ---@field locale string                                    # preferred locale for textual formats
+---@field sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil  # sorting rules for picker entries
 
 ---@alias SnacksBibtexMapping string|fun(picker: snacks.Picker, item: snacks.picker.Item)|snacks.picker.Action.spec
 
 ---@alias SnacksBibtexResolvedConfig SnacksBibtexConfig
+
+---@class SnacksBibtexSortSpec
+---@field field string
+---@field direction? "asc"|"desc"|"ascending"|"descending"
 
 local defaults ---@type SnacksBibtexConfig
 
@@ -120,6 +125,48 @@ local function normalize_files(files)
   return ret
 end
 
+local function normalize_sort_direction(direction)
+  if type(direction) ~= "string" then
+    return "asc"
+  end
+  direction = direction:lower()
+  if direction == "descending" then
+    direction = "desc"
+  elseif direction == "ascending" then
+    direction = "asc"
+  end
+  if direction ~= "desc" then
+    return "asc"
+  end
+  return direction
+end
+
+---@param sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil
+---@return SnacksBibtexSortSpec[]
+local function normalize_sort(sort)
+  if not sort then
+    return {}
+  end
+  local list = {}
+  if sort.field or sort.direction then
+    list = { sort }
+  elseif type(sort) == "table" then
+    list = sort
+  end
+  local normalized = {}
+  for _, item in ipairs(list) do
+    if type(item) == "string" then
+      normalized[#normalized + 1] = { field = item:lower(), direction = "asc" }
+    elseif type(item) == "table" and item.field then
+      normalized[#normalized + 1] = {
+        field = item.field:lower(),
+        direction = normalize_sort_direction(item.direction),
+      }
+    end
+  end
+  return normalized
+end
+
 ---@return SnacksBibtexConfig
 local function init_defaults()
   defaults = {
@@ -141,6 +188,12 @@ local function init_defaults()
       description = true,
       packages = true,
       template = false,
+    },
+    sort = {
+      { field = "frecency", direction = "desc" },
+      { field = "author", direction = "asc" },
+      { field = "year", direction = "asc" },
+      { field = "source", direction = "asc" },
     },
     locale = "en",
     mappings = {},
@@ -786,6 +839,7 @@ local function init_defaults()
   }
   normalize_citation_commands(defaults.citation_commands)
   normalize_citation_formats(defaults.citation_formats)
+  defaults.sort = normalize_sort(defaults.sort)
   return defaults
 end
 
@@ -803,6 +857,7 @@ function M.setup(opts)
   merged.global_files = normalize_files(merged.global_files) or {}
   normalize_citation_commands(merged.citation_commands)
   normalize_citation_formats(merged.citation_formats)
+  merged.sort = normalize_sort(merged.sort)
   options = merged
   return deepcopy(options)
 end
@@ -824,6 +879,7 @@ function M.resolve(opts)
   merged.global_files = merged.global_files or {}
   normalize_citation_commands(merged.citation_commands)
   normalize_citation_formats(merged.citation_formats)
+  merged.sort = normalize_sort(merged.sort)
   return merged
 end
 
