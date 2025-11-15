@@ -667,7 +667,7 @@ end
 
 local function default_mappings_for_cfg(cfg)
   local mappings = {
-    ["<CR>"] = "insert_key",
+    ["<CR>"] = "confirm",
     ["<C-e>"] = "insert_entry",
     ["<C-f>"] = "pick_field",
     ["<C-c>"] = "insert_citation",
@@ -695,9 +695,14 @@ local function default_mappings_for_cfg(cfg)
   return mappings
 end
 
+---Create picker actions and ensure default confirmation inserts into the source buffer.
+---@param snacks snacks.picker
+---@param cfg SnacksBibtexResolvedConfig
+---@return table<string, snacks.picker.Action.spec>
 local function make_actions(snacks, cfg)
   local actions = {}
-  actions.insert_key = function(picker, item)
+
+  local function insert_key_action(picker, item)
     if not item then
       return
     end
@@ -711,6 +716,9 @@ local function make_actions(snacks, cfg)
     insert_text(picker, text)
     picker:close()
   end
+
+  actions.insert_key = insert_key_action
+  actions.confirm = insert_key_action
 
   actions.insert_entry = function(picker, item)
     if not item then

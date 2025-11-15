@@ -60,7 +60,7 @@ Key | Action
 `<C-y>` | Open the citation format picker (APA, Harvard, Oxford templates included).
 `<C-f>` | Open a secondary picker to choose and insert a single field value.
 
-`<CR>` works from both the search prompt and the results list, so you can confirm immediately after typing or after moving through the list. All insertion shortcuts write into the buffer and window you launched the picker from, so trigger mappings can safely run from insert mode without jumping to the BibTeX file.
+`<CR>` works from both the search prompt and the results list, and snacks-bibtex overrides Snacks' default confirm action so Enter always inserts into the buffer you launched the picker from instead of opening the BibTeX source. All insertion shortcuts write into that original buffer and window, so trigger mappings can safely run from insert mode without jumping away.
 
 You can override keymaps globally via `require("snacks-bibtex").setup({ mappings = { ... } })` or per picker call by passing `mappings` to `bibtex({ ... })`. Custom mappings are automatically applied to both the results list and the search prompt unless you provide explicit `mode` options.
 
