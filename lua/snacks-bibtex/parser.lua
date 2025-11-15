@@ -177,7 +177,7 @@ local function find_project_files(cfg)
   if cfg.files then
     return vim.deepcopy(cfg.files)
   end
-  local cwd = (vim.uv and vim.uv.cwd() or vim.loop.cwd()) or vim.loop.cwd()
+  local cwd = (vim.uv and vim.uv.cwd()) or vim.loop.cwd()
   local opts = { path = cwd, type = "file" }
   if cfg.depth ~= nil then
     opts.depth = cfg.depth

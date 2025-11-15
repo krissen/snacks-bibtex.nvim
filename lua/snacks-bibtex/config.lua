@@ -1,16 +1,16 @@
 local M = {}
 
 ---@class SnacksBibtexConfig
----@field depth integer|nil           # directory recursion depth for local bib search
----@field files string[]|nil          # explicit list of project-local bib files
----@field global_files string[]|nil   # list of global bib files (outside project)
----@field search_fields string[]      # ordered list of fields to search (e.g. {"author","title","year","keywords"})
----@field format string               # default format for inserting citation keys / labels
----@field preview_format string       # how to format the preview line(s)
----@field citation_format? string     # template used when inserting formatted citations
----@field default_citation_format? string  # id of the default citation format template
----@field citation_format_defaults? { in_text?: string, reference?: string }
----@field citation_command_picker? { title?: string, command?: boolean, description?: boolean, packages?: boolean, template?: boolean }
+---@field depth integer|nil Directory recursion depth for local bib search
+---@field files string[]|nil Explicit list of project-local bib files
+---@field global_files string[]|nil List of global bib files (outside project)
+---@field search_fields string[] Ordered list of fields to search (e.g. {"author","title","year","keywords"})
+---@field format string Default format for inserting citation keys or labels
+---@field preview_format string Template used to format the preview line(s)
+---@field citation_format? string Template used when inserting formatted citations
+---@field default_citation_format? string Identifier of the default citation format template
+---@field citation_format_defaults? { in_text?: string, reference?: string } Default citation format identifiers per usage
+---@field citation_command_picker? { title?: string, command?: boolean, description?: boolean, packages?: boolean, template?: boolean } Citation command picker presentation settings
 ---@class SnacksBibtexCitationCommand
 ---@field command string
 ---@field template string
@@ -28,11 +28,12 @@ local M = {}
 ---@field locale? string
 ---@field enabled? boolean
 
----@field mappings table<string, SnacksBibtexMapping>|nil  # custom action mappings for the picker
----@field citation_commands SnacksBibtexCitationCommand[]  # available citation templates
----@field citation_formats SnacksBibtexCitationFormat[]    # available citation format templates
----@field locale string                                    # preferred locale for textual formats
----@field sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil  # sorting rules for picker entries
+---@field mappings table<string, SnacksBibtexMapping>|nil Custom action mappings for the picker
+---@field citation_commands SnacksBibtexCitationCommand[] Available citation templates
+---@field citation_formats SnacksBibtexCitationFormat[] Available citation format templates
+---@field locale string Preferred locale for textual formats
+---@field sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil Sorting rules for the initial picker entries
+---@field match_sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil Sorting rules applied when the query is non-empty
 
 ---@alias SnacksBibtexMapping string|fun(picker: snacks.Picker, item: snacks.picker.Item)|snacks.picker.Action.spec
 
@@ -167,6 +168,24 @@ local function normalize_sort(sort)
   return normalized
 end
 
+local function ensure_match_sort(sort, base)
+  local normalized = normalize_sort(sort)
+  if vim.tbl_isempty(normalized) then
+    normalized = vim.deepcopy(base or {})
+  end
+  local has_score = false
+  for _, rule in ipairs(normalized) do
+    if type(rule) == "table" and rule.field == "score" then
+      has_score = true
+      break
+    end
+  end
+  if not has_score then
+    table.insert(normalized, 1, { field = "score", direction = "desc" })
+  end
+  return normalized
+end
+
 ---@return SnacksBibtexConfig
 local function init_defaults()
   defaults = {
@@ -195,6 +214,7 @@ local function init_defaults()
       { field = "year", direction = "asc" },
       { field = "source", direction = "asc" },
     },
+    match_sort = nil,
     locale = "en",
     mappings = {},
     citation_commands = {
@@ -840,6 +860,7 @@ local function init_defaults()
   normalize_citation_commands(defaults.citation_commands)
   normalize_citation_formats(defaults.citation_formats)
   defaults.sort = normalize_sort(defaults.sort)
+  defaults.match_sort = ensure_match_sort(defaults.match_sort, defaults.sort)
   return defaults
 end
 
@@ -858,6 +879,7 @@ function M.setup(opts)
   normalize_citation_commands(merged.citation_commands)
   normalize_citation_formats(merged.citation_formats)
   merged.sort = normalize_sort(merged.sort)
+  merged.match_sort = ensure_match_sort(merged.match_sort, merged.sort)
   options = merged
   return deepcopy(options)
 end
@@ -880,6 +902,7 @@ function M.resolve(opts)
   normalize_citation_commands(merged.citation_commands)
   normalize_citation_formats(merged.citation_formats)
   merged.sort = normalize_sort(merged.sort)
+  merged.match_sort = ensure_match_sort(merged.match_sort, merged.sort)
   return merged
 end
 

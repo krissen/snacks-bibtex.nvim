@@ -215,6 +215,8 @@ local function get_sort_value(item, field)
   elseif field == "recent" or field == "recency" then
     local record = item.history
     return record and record.last or 0
+  elseif field == "score" then
+    return item.score or 0
   elseif field == "author" then
     return normalize_sort_string(fields.author) or normalize_sort_string(fields.editor)
   elseif field == "title" then
@@ -229,6 +231,10 @@ local function get_sort_value(item, field)
     return normalize_sort_string(item.type)
   elseif field == "file" then
     return normalize_sort_string(item.file)
+  elseif field == "label" then
+    return normalize_sort_string(item.label)
+  elseif field == "text" then
+    return normalize_sort_string(item.text)
   elseif field == "source" or field == "order" then
     return item.order or (item.entry and item.entry.order) or 0
   end
@@ -263,18 +269,22 @@ local function compare_values(a, b)
   return sa < sb and -1 or 1
 end
 
----@param items table[]
----@param cfg SnacksBibtexResolvedConfig
-local function apply_sort(items, cfg)
-  local rules = cfg.sort or {}
-  if vim.tbl_isempty(rules) then
-    return
-  end
-  table.sort(items, function(a, b)
+---Return `true` when `a` should appear before `b` after applying the provided sort rules.
+---@param a table
+---@param b table
+---@param rules SnacksBibtexSortSpec[]
+---@return boolean
+local function compare_with_rules(a, b, rules)
+  if rules and not vim.tbl_isempty(rules) then
     for _, rule in ipairs(rules) do
       if rule.field and rule.field ~= "" then
         local va = get_sort_value(a, rule.field)
         local vb = get_sort_value(b, rule.field)
+        if va == nil and vb ~= nil then
+          return false
+        elseif vb == nil and va ~= nil then
+          return true
+        end
         local cmp = compare_values(va, vb)
         if cmp ~= 0 then
           if rule.direction == "desc" then
@@ -285,18 +295,43 @@ local function apply_sort(items, cfg)
         end
       end
     end
-    local ao = a.order or (a.entry and a.entry.order) or 0
-    local bo = b.order or (b.entry and b.entry.order) or 0
-    if ao == bo then
-      local ak = normalize_sort_string(a.key) or ""
-      local bk = normalize_sort_string(b.key) or ""
-      if ak == bk then
-        return false
-      end
-      return ak < bk
+  end
+  local ao = a.order or (a.entry and a.entry.order) or 0
+  local bo = b.order or (b.entry and b.entry.order) or 0
+  if ao == bo then
+    local ak = normalize_sort_string(a.key) or ""
+    local bk = normalize_sort_string(b.key) or ""
+    if ak == bk then
+      return false
     end
-    return ao < bo
+    return ak < bk
+  end
+  return ao < bo
+end
+
+---Sort the initial list of picker items according to the configured rule chain
+---while preserving BibTeX order as the final fallback.
+---@param items table[]
+---@param cfg SnacksBibtexResolvedConfig
+local function apply_sort(items, cfg)
+  local rules = cfg.sort or {}
+  table.sort(items, function(a, b)
+    return compare_with_rules(a, b, rules)
   end)
+end
+
+---Build a Snacks-compatible sorter that prioritises matcher scores before the
+---configured tie-breakers.
+---@param cfg SnacksBibtexResolvedConfig
+---@return snacks.picker.sort|nil
+local function make_match_sorter(cfg)
+  local rules = cfg.match_sort or {}
+  if vim.tbl_isempty(rules) then
+    return nil
+  end
+  return function(a, b)
+    return compare_with_rules(a, b, rules)
+  end
 end
 
 local function sanitize_identifier(value)
@@ -1387,6 +1422,7 @@ function M.bibtex(opts)
     end,
     actions = actions,
     preview = "preview",
+    sort = make_match_sorter(cfg),
     win = {
       list = {
         keys = list_keys,

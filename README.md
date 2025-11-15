@@ -92,6 +92,7 @@ require("snacks-bibtex").setup({
     { field = "year", direction = "asc" },      -- then year ascending
     { field = "source", direction = "asc" },    -- finally original BibTeX order
   },
+  match_sort = nil,                 -- optional: overrides search-time ordering (defaults to score + `sort`)
   locale = "en",                    -- preferred locale for textual formats
   citation_commands = {             -- toggle citation templates or add your own
     -- each entry: { command, template, description?, packages?, enabled? }
@@ -113,9 +114,16 @@ default `sort` configuration ranks entries by frecency (a blend of usage count a
 and finally by the order in which items appear in your BibTeX sources. This keeps frequently cited works at the top while still
 providing deterministic alphabetical fallbacks.
 
-You can tweak or replace the ordering by editing the `sort` list. Each rule accepts a `field` and a `direction` (`"asc"` or
-`"desc"`). Supported fields include `frecency`, `frequency`, `recent`, `author`, `title`, `journal`, `year`, `key`, `type`,
-`file`, and `source` (the original BibTeX order).
+When you start typing, the picker always favours the highest scoring matches before applying your tie-breakers. By default the
+`match_sort` rules expand to `{ { field = "score", direction = "desc" }, unpack(sort) }`, so score wins first, then frecency,
+author, year, and source order. Override `match_sort` to change that behaviour—for example `{ { field = "score", direction =
+"desc" }, { field = "recent", direction = "desc" } }` keeps the best matches first but prefers recently used references over
+older favourites.
+
+You can tweak or replace the ordering by editing the `sort` list (used when the prompt is empty) and the `match_sort` list (used
+after you begin typing). Each rule accepts a `field` and a `direction` (`"asc"` or `"desc"`). Supported fields include `score`,
+`frecency`, `frequency`, `recent`, `author`, `title`, `journal`, `year`, `key`, `type`, `label`, `text`, `file`, and `source`
+(the original BibTeX order).
 
 ```lua
 require("snacks-bibtex").setup({
@@ -123,6 +131,11 @@ require("snacks-bibtex").setup({
     { field = "author", direction = "asc" },
     { field = "year", direction = "desc" },
     { field = "title", direction = "asc" },
+  },
+  match_sort = {
+    { field = "score", direction = "desc" },
+    { field = "recent", direction = "desc" },
+    { field = "author", direction = "asc" },
   },
 })
 ```

@@ -20,6 +20,7 @@ end, {
   desc = "Open the Snacks BibTeX picker",
   nargs = "?",
   complete = function()
+    -- No predefined completion items; returning an empty list keeps the command quiet.
     return {}
   end,
 })
