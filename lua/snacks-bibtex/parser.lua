@@ -29,18 +29,19 @@ local function read_file(path)
   return data
 end
 
+---@param line string
+---@return integer
 local function count_braces(line)
-  local open, close = 0, 0
+  local level = 0
   for c in line:gmatch("[{}]") do
-    if c == "{" then
-      open = open + 1
-    else
-      close = close + 1
-    end
+    level = level + (c == "{" and 1 or -1)
   end
-  return open, close
+  return level
 end
 
+---@param body string
+---@param idx integer
+---@return string, integer
 local function parse_value(body, idx)
   local len = #body
   while idx <= len and body:sub(idx, idx):match("%s") do
@@ -71,7 +72,8 @@ local function parse_value(body, idx)
     local j = idx + 1
     while j <= len do
       local ch = body:sub(j, j)
-      if ch == '"' and body:sub(j - 1, j - 1) ~= "\\" then
+      local prev = j > 1 and body:sub(j - 1, j - 1) or nil
+      if ch == '"' and prev ~= "\\" then
         break
       end
       j = j + 1
@@ -134,15 +136,13 @@ local function parse_entries(text, path)
               line = idx,
               lines = { line },
             }
-            local open, close = count_braces(line)
-            brace_level = open - close
+            brace_level = count_braces(line)
           end
         end
       end
     else
       current.lines[#current.lines + 1] = line
-      local open, close = count_braces(line)
-      brace_level = brace_level + open - close
+      brace_level = brace_level + count_braces(line)
       if brace_level <= 0 then
         local raw = table.concat(current.lines, "\n")
         if not raw:match("\n$") then

@@ -10,10 +10,10 @@ Scan local and global `*.bib` files, preview entries, and insert citation keys o
 - Rich preview rendered directly from the BibTeX entry.
 - Ready-made actions for inserting keys, full entries, formatted citations, or individual fields.
 - Jump directly to the BibTeX source entry when you need to tweak metadata.
-- Quick shortcuts for `\cite`, `\citep`, `\citet`, and formatted APA/Harvard/Oxford references (with pickers for the full catalogues).
+- Quick shortcuts for `\cite`, `\citep`, `\citet`, and formatted APA/Harvard/Oxford references (with pickers for the full catalogs).
 - APA 7 templates derive family-name in-text citations plus reference entries with editors, publishers, page ranges, and DOI/URL details when available.
 - Citation command and format pickers preview the rendered text for the highlighted entry so you can confirm before inserting.
-- Customisable mappings and picker options via Lua.
+- Customizable mappings and picker options via Lua.
 - Toggle which metadata columns the citation command picker displays (packages, descriptions, templates).
 
 ## Installation
@@ -57,7 +57,7 @@ Key | Action
 `<C-a>` | Insert `\cite{<key>}` (generic BibTeX/BibLaTeX citation).
 `<C-p>` | Insert `\citep{<key>}` (natbib parenthetical citation).
 `<C-t>` | Insert `\citet{<key>}` (natbib textual citation).
-`<C-c>` | Open the citation command picker covering the full BibTeX/natbib/BibLaTeX catalogue.
+`<C-c>` | Open the citation command picker covering the full BibTeX/natbib/BibLaTeX catalog.
 `<C-g>` | Jump to the BibTeX source file at the first line of the selected entry (reuses the window you launched the picker from).
 `<C-s>` | Insert the default in-text citation format (APA 7 in English by default).
 `<C-r>` | Insert the default reference-list citation format (APA 7 in English by default).
@@ -159,6 +159,15 @@ require("snacks-bibtex").setup({
 Removing the `frecency` rule gives you a purely alphabetical picker; keeping it ensures the most frequently used entries float
 to the top automatically.
 
+If the stored history file contains timestamps that appear to come from the future (for example after the system clock moves
+backwards), snacks-bibtex warns once during the next session and ignores the negative age so frecency ordering remains stable.
+
+#### Parser robustness
+
+The parser keeps track of brace balance with a net counter and honors escaped quotes, allowing it to process nested fields and
+quoted values reliably. Author/editor names are split only on the literal lowercase ` and ` separator at brace depth zero, so
+capitalized words that contain “And” stay intact while still following BibTeX’s requirements.
+
 ### Citation commands
 
 Pressing `<C-c>` opens a dedicated picker with all enabled citation templates. Each row shows the command, required packages (if any), description, and a rendered sample for the highlighted entry so you can confirm the output before inserting. By default the following commands are active:
@@ -258,7 +267,7 @@ The command picker preview pane renders the highlighted command's output for the
 Press `<CR>` to apply the highlighted command; snacks-bibtex overrides Snacks' default confirm action so the picker always writes back into the buffer where you launched it.
 All bundled templates render canonical snippets such as `\cite{key}` without extra whitespace inside the braces so inserted commands follow common LaTeX style guides out of the box.
 
-#### Bundled command catalogue
+#### Bundled command catalog
 
 The plugin ships ready-to-enable templates for every `\cite`-family command provided by BibTeX, natbib, and BibLaTeX. Commands are grouped below for convenience:
 

@@ -10,6 +10,7 @@ local M = {}
 local history ---@type table<string, { count: integer, last: integer }>
 local history_loaded = false
 local history_dirty = false
+local history_clock_skew_warned = false
 
 ---Forward declaration so helper functions can reference the insertion utility before it is defined.
 ---@type fun(picker: snacks.Picker|nil, text: string|nil)|nil
@@ -154,9 +155,11 @@ local function get_history_entry(key)
   }
 end
 
+---Compute a frecency score for a history record.
+---Warns once if the history data appears to come from the future so users can fix clock skew.
 ---@param record { count: integer, last: integer }|nil
 ---@param now integer
----@return number
+---@return integer
 local function compute_frecency(record, now)
   if not record then
     return 0
@@ -167,6 +170,21 @@ local function compute_frecency(record, now)
   if last > 0 then
     local age = now - last
     if age < 0 then
+      if not history_clock_skew_warned then
+        history_clock_skew_warned = true
+        local history_file = history_path() or "the history file"
+        vim.schedule(function()
+          vim.notify(
+            string.format(
+              "[snacks-bibtex] Ignoring future history timestamp (last=%d, now=%d). Check your system clock or delete %s.",
+              last,
+              now,
+              history_file
+            ),
+            vim.log.levels.WARN
+          )
+        end)
+      end
       age = 0
     end
     recency = math.max(0, 1000000 - age)
@@ -651,6 +669,7 @@ local function strip_outer_braces(value)
   return trimmed
 end
 
+---Split a BibTeX author/editor list on literal lowercase ` and ` separators while respecting brace depth.
 ---@param value string|nil
 ---@return string[]
 local function split_names(value)
@@ -671,7 +690,7 @@ local function split_names(value)
     elseif ch == "}" then
       depth = math.max(0, depth - 1)
       i = i + 1
-    elseif depth == 0 and text:sub(i, i + 4):lower() == " and " then
+    elseif depth == 0 and text:sub(i, i + 4) == " and " then
       names[#names + 1] = text:sub(start, i - 1)
       start = i + 5
       i = start
@@ -683,13 +702,14 @@ local function split_names(value)
   return names
 end
 
+---Return the first UTF-8 character from the given text, ignoring leading null bytes.
 ---@param text string|nil
 ---@return string
 local function first_utf8_char(text)
   if type(text) ~= "string" or text == "" then
     return ""
   end
-  local char = text:match("[%z\1-\127\194-\244][\128-\191]*")
+  local char = text:match("[\1-\127\194-\244][\128-\191]*")
   return char or text:sub(1, 1)
 end
 
