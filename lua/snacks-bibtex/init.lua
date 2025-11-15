@@ -1398,7 +1398,7 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, parent
   })
 end
 
----Open a citation format picker that applies templates, shows live previews, and updates history.
+---Open a citation format picker that applies templates, shows live previews, and surfaces human readable metadata in the list.
 ---@param snacks snacks.picker
 ---@param entry SnacksBibtexEntry
 ---@param formats SnacksBibtexCitationFormat[]
@@ -1438,20 +1438,20 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, parent_p
     title = "Citation formats",
     items = items,
     format = function(item)
-      local parts = { { item.label } }
+      local parts = { item.label }
       if item.category and item.category ~= "" then
-        parts[#parts + 1] = { ("[%s]"):format(item.category), "Comment" }
+        parts[#parts + 1] = ("[%s]"):format(item.category)
       end
       if item.locale and item.locale ~= "" then
-        parts[#parts + 1] = { ("(%s)"):format(item.locale), "Comment" }
+        parts[#parts + 1] = ("(%s)"):format(item.locale)
       end
       if item.description and item.description ~= "" then
-        parts[#parts + 1] = { item.description, "Comment" }
+        parts[#parts + 1] = "— " .. item.description
       end
       if item.sample and item.sample ~= "" then
-        parts[#parts + 1] = { item.sample, "String" }
+        parts[#parts + 1] = "→ " .. item.sample
       end
-      return { parts }
+      return table.concat(parts, " ")
     end,
     preview = "preview",
     actions = {

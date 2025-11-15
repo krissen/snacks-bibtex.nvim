@@ -115,6 +115,8 @@ local function normalize_citation_formats(list)
   end
 end
 
+---@param files string[]|nil
+---@return string[]|nil
 local function normalize_files(files)
   if not files then
     return nil
@@ -123,7 +125,15 @@ local function normalize_files(files)
   local seen = {} ---@type table<string, boolean>
   for _, file in ipairs(files) do
     if type(file) == "string" and file ~= "" then
-      local normalized = vim.fs.normalize(file)
+      local expanded = file
+      -- Expand user paths such as "~/library.bib" or "$HOME/library.bib" so uv.fs_open can resolve them.
+      if expanded:find("[~$]") then
+        local ok, result = pcall(vim.fn.expand, expanded)
+        if ok and type(result) == "string" and result ~= "" then
+          expanded = result
+        end
+      end
+      local normalized = vim.fs.normalize(expanded)
       if not seen[normalized] then
         seen[normalized] = true
         ret[#ret + 1] = normalized
@@ -917,7 +927,7 @@ local function init_defaults()
         description = "Harvard style in-text citation",
         category = "in_text",
         locale = "en",
-        enabled = false,
+        enabled = true,
       },
       {
         id = "harvard_reference",
@@ -926,7 +936,7 @@ local function init_defaults()
         description = "Harvard style reference entry",
         category = "reference",
         locale = "en",
-        enabled = false,
+        enabled = true,
       },
       {
         id = "oxford_reference",
@@ -935,7 +945,7 @@ local function init_defaults()
         description = "Oxford style bibliography entry",
         category = "reference",
         locale = "en",
-        enabled = false,
+        enabled = true,
       },
     },
   }

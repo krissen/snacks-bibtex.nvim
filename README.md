@@ -59,12 +59,12 @@ Key | Action
 `<C-c>` | Open the citation command picker covering the full BibTeX/natbib/BibLaTeX catalogue.
 `<C-s>` | Insert the default in-text citation format (APA 7 in English by default).
 `<C-r>` | Insert the default reference-list citation format (APA 7 in English by default).
-`<C-y>` | Open the citation format picker (APA, Harvard, Oxford templates included with live preview).
+`<C-y>` | Open the citation format picker (APA, Harvard, Oxford templates included with live previews and labelled list entries).
 `<C-f>` | Open a secondary picker to choose and insert a single field value.
 
 `<CR>` works from both the search prompt and the results list, and snacks-bibtex overrides Snacks' default confirm action so Enter always inserts into the buffer you launched the picker from instead of opening the BibTeX source. All insertion shortcuts write into that original buffer and window, and the picker restores your previous insert/replace mode so trigger mappings can safely run without leaving you in normal mode.
 
-The citation format picker renders each enabled template for the highlighted entry, giving you a preview of the exact text that will be inserted.
+The citation format picker renders each enabled template for the highlighted entry, giving you a preview of the exact text that will be inserted. APA (in-text and reference), Harvard (in-text and reference), and Oxford (reference) formats ship enabled by default so you can immediately compare them; disable or extend the list through `citation_formats`.
 
 You can override keymaps globally via `require("snacks-bibtex").setup({ mappings = { ... } })` or per picker call by passing `mappings` to `bibtex({ ... })`. Custom mappings are automatically applied to both the results list and the search prompt unless you provide explicit `mode` options.
 
@@ -73,8 +73,8 @@ You can override keymaps globally via `require("snacks-bibtex").setup({ mappings
 ```lua
 require("snacks-bibtex").setup({
   depth = 1,                        -- recursion depth for project search (nil for unlimited)
-  files = nil,                      -- explicit list of project-local bib files
-  global_files = {},                -- list of additional bib files
+  files = nil,                      -- explicit list of project-local bib files (supports ~ / $ENV expansion)
+  global_files = {},                -- list of additional bib files (supports ~ / $ENV expansion)
   search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
   match_priority = { "author", "year", "title" }, -- remaining search_fields are appended automatically
   format = "%s",                    -- how keys are inserted with <CR>
@@ -111,6 +111,8 @@ require("snacks-bibtex").setup({
   },
 })
 ```
+
+Paths supplied through `files` or `global_files` may include `~` or environment variables (for example `"~/Documents/library.bib"` or `"$ZOTERO_HOME/export.bib"`); snacks-bibtex expands these before attempting to read the files.
 
 #### Sorting and frecency
 
