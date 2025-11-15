@@ -1615,6 +1615,7 @@ local function make_item(entry, cfg, now)
     fields = fields,
     file = entry.file,
     raw = entry.raw,
+    line = entry.line,
     entry = entry,
     order = entry.order or 0,
     history = history_record,
@@ -1838,6 +1839,7 @@ local function default_mappings_for_cfg(cfg)
     ["<C-f>"] = "pick_field",
     ["<C-c>"] = "insert_citation",
     ["<C-y>"] = "pick_citation_format",
+    ["<C-g>"] = "open_entry",
   }
 
   local defaults = cfg.citation_format_defaults or {}
@@ -1861,8 +1863,8 @@ local function default_mappings_for_cfg(cfg)
   return mappings
 end
 
----Create picker actions, ensure confirmation inserts into the source buffer, and
----track entry usage for frecency sorting.
+---Create picker actions, ensure confirmation inserts into the source buffer, track
+---entry usage for frecency sorting, and offer navigation back to the BibTeX source.
 ---@param snacks snacks.picker
 ---@param cfg SnacksBibtexResolvedConfig
 ---@return table<string, snacks.picker.Action.spec>
@@ -1887,6 +1889,42 @@ local function make_actions(snacks, cfg)
 
   actions.insert_key = insert_key_action
   actions.confirm = insert_key_action
+
+  actions.open_entry = function(picker, item)
+    if not item then
+      return
+    end
+    local entry = item.entry or item
+    local file = entry.file or item.file
+    if not file or file == "" then
+      vim.notify("Entry has no source file", vim.log.levels.WARN, { title = "snacks-bibtex" })
+      return
+    end
+    local line = entry.line or item.line or 1
+    local origin_win = picker and picker._snacks_bibtex_origin_win
+    picker:close()
+    vim.schedule(function()
+      local ok, buf = pcall(vim.fn.bufadd, file)
+      if not ok or not buf or buf <= 0 then
+        vim.notify("Could not open " .. file, vim.log.levels.ERROR, { title = "snacks-bibtex" })
+        return
+      end
+      pcall(vim.fn.bufload, buf)
+      local win = nil
+      if origin_win and vim.api.nvim_win_is_valid(origin_win) then
+        win = origin_win
+        vim.api.nvim_set_current_win(win)
+      else
+        win = vim.api.nvim_get_current_win()
+      end
+      if not vim.api.nvim_win_is_valid(win) then
+        return
+      end
+      vim.api.nvim_set_current_buf(win, buf)
+      local target_line = math.max(1, tonumber(line) or 1)
+      vim.api.nvim_win_set_cursor(win, { target_line, 0 })
+    end)
+  end
 
   actions.insert_entry = function(picker, item)
     if not item then

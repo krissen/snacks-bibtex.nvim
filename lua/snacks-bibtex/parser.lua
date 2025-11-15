@@ -8,6 +8,7 @@ local M = {}
 ---@field fields table<string, string>
 ---@field file string
 ---@field raw string
+---@field line integer
 ---@field order integer        # stable order based on appearance across all sources
 
 local function read_file(path)
@@ -117,7 +118,7 @@ local function parse_entries(text, path)
   local lines = vim.split(text, "\n", { plain = true })
   local current
   local brace_level = 0
-  for _, line in ipairs(lines) do
+  for idx, line in ipairs(lines) do
     if not current then
       local entry_type, rest = line:match("^%s*@(%w+)%s*%{(.*)$")
       if entry_type then
@@ -130,6 +131,7 @@ local function parse_entries(text, path)
               key = key,
               fields = {},
               file = path,
+              line = idx,
               lines = { line },
             }
             local open, close = count_braces(line)
@@ -162,6 +164,7 @@ local function parse_entries(text, path)
           fields = current.fields,
           file = current.file,
           raw = current.raw,
+          line = current.line,
         }
         current = nil
         brace_level = 0
