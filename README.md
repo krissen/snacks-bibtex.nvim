@@ -10,6 +10,8 @@ Scan local and global `*.bib` files, preview entries, and insert citation keys o
 - Rich preview rendered directly from the BibTeX entry.
 - Ready-made actions for inserting keys, full entries, formatted citations, or individual fields.
 - Quick shortcuts for `\cite`, `\citep`, `\citet`, and formatted APA/Harvard/Oxford references (with pickers for the full catalogues).
+- APA 7 templates derive family-name in-text citations plus reference entries with editors, publishers, page ranges, and DOI/URL details when available.
+- Citation format pickers preview the rendered text for the highlighted entry so you can confirm before inserting.
 - Customisable mappings and picker options via Lua.
 - Toggle which metadata columns the citation command picker displays (packages, descriptions, templates).
 
@@ -62,6 +64,8 @@ Key | Action
 
 `<CR>` works from both the search prompt and the results list, and snacks-bibtex overrides Snacks' default confirm action so Enter always inserts into the buffer you launched the picker from instead of opening the BibTeX source. All insertion shortcuts write into that original buffer and window, and the picker restores your previous insert/replace mode so trigger mappings can safely run without leaving you in normal mode.
 
+The citation format picker renders each enabled template for the highlighted entry, giving you a preview of the exact text that will be inserted.
+
 You can override keymaps globally via `require("snacks-bibtex").setup({ mappings = { ... } })` or per picker call by passing `mappings` to `bibtex({ ... })`. Custom mappings are automatically applied to both the results list and the search prompt unless you provide explicit `mode` options.
 
 ### Configuration
@@ -74,8 +78,8 @@ require("snacks-bibtex").setup({
   search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
   match_priority = { "author", "year", "title" }, -- remaining search_fields are appended automatically
   format = "%s",                    -- how keys are inserted with <CR>
-  preview_format = "{{author}} ({{year}}), {{title}}",
-  citation_format = "{{author}} ({{year}})", -- fallback text when no format template is available
+  preview_format = "{{authors.reference}} ({{year}}) — {{title}}",
+  citation_format = "{{apa.in_text}}", -- fallback text when no format template is available
   default_citation_format = "apa7_in_text",   -- id from `citation_formats` used as the fallback
   citation_format_defaults = {
     in_text = "apa7_in_text",       -- default for <C-s>
@@ -254,6 +258,8 @@ The plugin ships ready-to-enable templates for every `\cite`-family command prov
 
 `<C-s>` and `<C-r>` insert ready-made textual reference templates. `<C-y>` opens a picker listing every enabled format. The defaults focus on APA 7 (enabled) plus Harvard and Oxford (disabled) in English.
 
+The bundled APA 7 presets derive family-name-only in-text citations and assemble reference entries with editors, book titles, publishers, page ranges, and DOI/URL links whenever that data exists.
+
 Enable or extend formats through `citation_formats`:
 
 ```lua
@@ -269,8 +275,8 @@ end
 table.insert(cfg.citation_formats, {
   id = "apa7_in_text_sv",
   name = "APA 7 (in-text, Swedish)",
-  template = "({{author}}, {{year}})",
-  description = "APA 7th edition in-text citation (Swedish)",
+  template = "{{apa.in_text}}",
+  description = "APA 7th edition in-text citation (Swedish locale)",
   category = "in_text",
   locale = "sv",
   enabled = true,
@@ -296,7 +302,7 @@ require("snacks-bibtex").setup({
     {
       id = "oxford_reference",
       name = "Oxford (reference list)",
-      template = "{{author}}, {{title}} ({{publisher}}, {{year}})",
+      template = "{{authors.reference}}, {{title}} ({{publisher}}, {{year}})",
       category = "reference",
       locale = "en",
       enabled = true,
@@ -308,6 +314,24 @@ require("snacks-bibtex").setup({
   },
 })
 ```
+
+#### Template placeholders
+
+Each entry exposes derived metadata for templates in addition to the raw BibTeX fields:
+
+- `{{apa.in_text}}` / `{{apa.reference}}`: Fully formatted APA 7 strings that respect author, editor, year, book/journal, publisher, page, and DOI/URL information when available.
+- `{{authors.in_text}}`: Author family-name string used for in-text citations (adds `et al.` for 3+ authors).
+- `{{authors.reference}}`: Author list formatted for reference lists with initials and Oxford comma handling.
+- `{{authors.families}}`: Family names joined with commas and `&` for quick custom styles.
+- `{{authors.count}}`: Number of parsed authors.
+- `{{editors.collection}}`: Editor initials + family names joined for "In … (Ed./Eds.)" clauses.
+- `{{journal}}`, `{{booktitle}}`, `{{publisher}}`, `{{location}}`, `{{volume}}`, `{{issue}}`: Unicode-normalised text pulled from the BibTeX entry.
+- `{{pages}}`: Page range without `pp.` (suitable for journal references).
+- `{{pages_collection}}`: Page range prefixed with `pp.`/`p.` for chapters and collections.
+- `{{doi}}`, `{{url}}`: Cleaned DOI/URL values (`{{doi}}` expands to `https://doi.org/<value>` when needed).
+- `{{year}}`, `{{title}}`, `{{organization}}`: Sanitised year, title, and organisation fallbacks.
+
+All derived values strip common LaTeX accent escapes and convert them to UTF-8 so the rendered citation displays the expected characters (e.g. `G\"oteborg` → `Göteborg`).
 
 Call `bibtex()` with overrides for a single invocation:
 

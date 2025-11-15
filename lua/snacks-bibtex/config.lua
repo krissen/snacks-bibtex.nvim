@@ -276,8 +276,8 @@ local function init_defaults()
     search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
     match_priority = { "author", "year", "title" },
     format = "%s",
-    preview_format = "{{author}} ({{year}}), {{title}}",
-    citation_format = "{{author}} ({{year}})",
+    preview_format = "{{authors.reference}} ({{year}}) — {{title}}",
+    citation_format = "{{apa.in_text}}",
     default_citation_format = "apa7_in_text",
     citation_format_defaults = {
       in_text = "apa7_in_text",
@@ -895,7 +895,7 @@ local function init_defaults()
       {
         id = "apa7_in_text",
         name = "APA 7 (in-text, English)",
-        template = "({{author}}, {{year}})",
+        template = "{{apa.in_text}}",
         description = "APA 7th edition in-text citation",
         category = "in_text",
         locale = "en",
@@ -904,7 +904,7 @@ local function init_defaults()
       {
         id = "apa7_reference",
         name = "APA 7 (reference list, English)",
-        template = "{{author}} ({{year}}). {{title}}. {{journal}}.",
+        template = "{{apa.reference}}",
         description = "APA 7th edition reference entry",
         category = "reference",
         locale = "en",
@@ -913,7 +913,7 @@ local function init_defaults()
       {
         id = "harvard_in_text",
         name = "Harvard (in-text, English)",
-        template = "{{author}} {{year}}",
+        template = "{{authors.in_text}} {{year}}",
         description = "Harvard style in-text citation",
         category = "in_text",
         locale = "en",
@@ -922,7 +922,7 @@ local function init_defaults()
       {
         id = "harvard_reference",
         name = "Harvard (reference list, English)",
-        template = "{{author}}. {{year}}. {{title}}. {{journal}}.",
+        template = "{{authors.reference}}. {{year}}. {{title}}. {{journal}}.",
         description = "Harvard style reference entry",
         category = "reference",
         locale = "en",
@@ -931,7 +931,7 @@ local function init_defaults()
       {
         id = "oxford_reference",
         name = "Oxford (reference list, English)",
-        template = "{{author}}, {{title}} ({{publisher}}, {{year}})",
+        template = "{{authors.reference}}, {{title}} ({{publisher}}, {{year}})",
         description = "Oxford style bibliography entry",
         category = "reference",
         locale = "en",

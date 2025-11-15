@@ -364,11 +364,35 @@ local function ensure_snacks(opts)
   return Snacks
 end
 
+local ensure_template_values
+
 local function field_value(entry, name)
-  if not name or name == "" then
+  if not entry or not name or name == "" then
     return ""
   end
-  name = name:lower()
+  local placeholder = vim.trim(name)
+  if placeholder == "" then
+    return ""
+  end
+  local lowered = placeholder:lower()
+  local values = ensure_template_values(entry)
+  if lowered:find("%.") then
+    local current = values
+    for part in lowered:gmatch("[^%.]+") do
+      part = part:lower()
+      if type(current) ~= "table" then
+        current = nil
+        break
+      end
+      current = current[part]
+    end
+    if type(current) == "string" or type(current) == "number" then
+      return tostring(current)
+    end
+  elseif values and (type(values[lowered]) == "string" or type(values[lowered]) == "number") then
+    return tostring(values[lowered])
+  end
+  local name = lowered
   if name == "key" then
     return entry.key or ""
   elseif name == "type" then
@@ -383,6 +407,7 @@ local function format_template(template, entry)
   if not template or template == "" then
     return ""
   end
+  ensure_template_values(entry)
   return (template:gsub("{{(.-)}}", function(field)
     field = vim.trim(field)
     return field_value(entry, field)
@@ -592,6 +617,544 @@ local function latex_to_unicode(value)
   text = text:gsub("~", " ")
 
   return text
+end
+
+---@param value string|nil
+---@return string
+local function strip_outer_braces(value)
+  if type(value) ~= "string" then
+    return ""
+  end
+  local trimmed = vim.trim(value)
+  while trimmed:match("^%b{}$") do
+    trimmed = trimmed:sub(2, -2)
+    trimmed = vim.trim(trimmed)
+  end
+  return trimmed
+end
+
+---@param value string|nil
+---@return string[]
+local function split_names(value)
+  local names = {}
+  if type(value) ~= "string" or value == "" then
+    return names
+  end
+  local text = value
+  local len = #text
+  local depth = 0
+  local start = 1
+  local i = 1
+  while i <= len do
+    local ch = text:sub(i, i)
+    if ch == "{" then
+      depth = depth + 1
+      i = i + 1
+    elseif ch == "}" then
+      depth = math.max(0, depth - 1)
+      i = i + 1
+    elseif depth == 0 and text:sub(i, i + 4):lower() == " and " then
+      names[#names + 1] = text:sub(start, i - 1)
+      start = i + 5
+      i = start
+    else
+      i = i + 1
+    end
+  end
+  names[#names + 1] = text:sub(start)
+  return names
+end
+
+---@param text string|nil
+---@return string
+local function first_utf8_char(text)
+  if type(text) ~= "string" or text == "" then
+    return ""
+  end
+  local char = text:match("[%z\1-\127\194-\244][\128-\191]*")
+  return char or text:sub(1, 1)
+end
+
+---@param char string|nil
+---@return string
+local function to_upper(char)
+  if type(char) ~= "string" or char == "" then
+    return ""
+  end
+  local ok, res = pcall(vim.fn.toupper, char)
+  if ok and type(res) == "string" then
+    return res
+  end
+  return char:upper()
+end
+
+---@param given string|nil
+---@return string
+local function compute_initials(given)
+  if type(given) ~= "string" or given == "" then
+    return ""
+  end
+  local parts = {}
+  for word in given:gmatch("%S+") do
+    local hyphenated = {}
+    for segment in word:gmatch("[^%-]+") do
+      local char = first_utf8_char(segment)
+      if char ~= "" then
+        hyphenated[#hyphenated + 1] = to_upper(char)
+      end
+    end
+    if #hyphenated > 0 then
+      parts[#parts + 1] = table.concat(hyphenated, ".-") .. "."
+    end
+  end
+  return table.concat(parts, " ")
+end
+
+---@param raw string
+---@return table|nil
+local function parse_name_segment(raw)
+  if type(raw) ~= "string" then
+    return nil
+  end
+  local literal = latex_to_unicode(strip_outer_braces(raw))
+  local cleaned = literal
+  if cleaned == "" then
+    return nil
+  end
+  local parts = {}
+  for part in cleaned:gmatch("[^,]+") do
+    parts[#parts + 1] = vim.trim(part)
+  end
+
+  local family, suffix, given
+  if #parts > 1 then
+    family = parts[1]
+    if #parts == 2 then
+      given = parts[2]
+    else
+      suffix = parts[2]
+      given = parts[3]
+    end
+  else
+    local tokens = {}
+    for token in cleaned:gmatch("%S+") do
+      tokens[#tokens + 1] = token
+    end
+    if #tokens == 1 then
+      family = tokens[1]
+    else
+      family = tokens[#tokens]
+      given = table.concat(tokens, " ", 1, #tokens - 1)
+    end
+  end
+
+  family = latex_to_unicode(family or "")
+  given = latex_to_unicode(given or "")
+  suffix = latex_to_unicode(suffix or "")
+
+  local initials = compute_initials(given)
+  local reference
+  if family ~= "" and initials ~= "" then
+    reference = ("%s, %s"):format(family, initials)
+  else
+    reference = literal
+  end
+  if suffix ~= "" and reference ~= literal then
+    reference = ("%s, %s"):format(reference, suffix)
+  end
+
+  local editor_reference
+  if initials ~= "" and family ~= "" then
+    if suffix ~= "" then
+      editor_reference = ("%s %s, %s"):format(initials, family, suffix)
+    else
+      editor_reference = ("%s %s"):format(initials, family)
+    end
+  else
+    editor_reference = literal
+  end
+
+  local in_text
+  if family ~= "" then
+    in_text = family
+  else
+    in_text = literal
+  end
+
+  return {
+    literal = literal,
+    family = family,
+    given = given,
+    suffix = suffix,
+    initials = initials,
+    reference = reference,
+    editor_reference = editor_reference,
+    in_text = in_text,
+  }
+end
+
+---@param value string|nil
+---@return table[]
+local function parse_name_list(value)
+  local list = {}
+  if type(value) ~= "string" or value == "" then
+    return list
+  end
+  for _, segment in ipairs(split_names(value)) do
+    local name = parse_name_segment(segment)
+    if name then
+      list[#list + 1] = name
+    end
+  end
+  return list
+end
+
+---@param list string[]
+---@return string
+local function join_serial(list)
+  if #list == 0 then
+    return ""
+  elseif #list == 1 then
+    return list[1]
+  elseif #list == 2 then
+    return ("%s & %s"):format(list[1], list[2])
+  end
+  local leading = table.concat(list, ", ", 1, #list - 1)
+  return ("%s, & %s"):format(leading, list[#list])
+end
+
+---@param names table[]
+---@return string
+local function format_authors_in_text(names)
+  local count = #names
+  if count == 0 then
+    return ""
+  elseif count == 1 then
+    return names[1].in_text
+  elseif count == 2 then
+    return join_serial({ names[1].in_text, names[2].in_text })
+  end
+  return ("%s et al."):format(names[1].in_text)
+end
+
+---@param names table[]
+---@return string
+local function format_authors_reference(names)
+  if #names == 0 then
+    return ""
+  end
+  local formatted = {}
+  for _, name in ipairs(names) do
+    formatted[#formatted + 1] = name.reference
+  end
+  local count = #formatted
+  if count == 1 then
+    return formatted[1]
+  elseif count == 2 then
+    return ("%s & %s"):format(formatted[1], formatted[2])
+  elseif count <= 20 then
+    local leading = table.concat(formatted, ", ", 1, count - 1)
+    return ("%s, & %s"):format(leading, formatted[count])
+  end
+  local truncated = {}
+  for i = 1, 19 do
+    truncated[#truncated + 1] = formatted[i]
+  end
+  truncated[#truncated + 1] = "..."
+  truncated[#truncated + 1] = formatted[count]
+  return table.concat(truncated, ", ")
+end
+
+---@param names table[]
+---@return string
+local function format_editors_collection(names)
+  if #names == 0 then
+    return ""
+  end
+  local formatted = {}
+  for _, name in ipairs(names) do
+    formatted[#formatted + 1] = name.editor_reference
+  end
+  return join_serial(formatted)
+end
+
+---@param names table[]
+---@return string
+local function join_families(names)
+  if #names == 0 then
+    return ""
+  end
+  local families = {}
+  for _, name in ipairs(names) do
+    families[#families + 1] = name.family ~= "" and name.family or name.literal
+  end
+  return join_serial(families)
+end
+
+---@param names table[]
+---@return table
+local function build_person_meta(names)
+  return {
+    list = names,
+    count = #names,
+    in_text = format_authors_in_text(names),
+    reference = format_authors_reference(names),
+    collection = format_editors_collection(names),
+    families = join_families(names),
+  }
+end
+
+---@param value string|nil
+---@return string
+local function normalize_page_range(value)
+  if type(value) ~= "string" or value == "" then
+    return ""
+  end
+  local text = latex_to_unicode(value)
+  text = vim.trim(text)
+  if text == "" then
+    return ""
+  end
+  text = text:gsub("%s*%-%s*", "–")
+  text = text:gsub("^[Pp]+%.?%s*", "")
+  return text
+end
+
+---@param value string|nil
+---@return string
+local function format_collection_pages(value)
+  local range = normalize_page_range(value)
+  if range == "" then
+    return ""
+  end
+  if range:find("–") then
+    return ("pp. %s"):format(range)
+  end
+  return ("p. %s"):format(range)
+end
+
+---@param fields table<string, any>
+---@return string
+local function build_year_text(fields)
+  local year = extract_year(fields)
+  if year then
+    return tostring(year)
+  end
+  local raw = fields.year or fields.date
+  if type(raw) == "string" then
+    return latex_to_unicode(raw)
+  end
+  return ""
+end
+
+---@param value string|nil
+---@return string
+local function latex_trim(value)
+  if type(value) ~= "string" or value == "" then
+    return ""
+  end
+  return vim.trim(latex_to_unicode(value))
+end
+
+---@param location string|nil
+---@param publisher string|nil
+---@return string
+local function build_publisher_segment(location, publisher)
+  local parts = {}
+  if location and location ~= "" then
+    parts[#parts + 1] = location
+  end
+  if publisher and publisher ~= "" then
+    parts[#parts + 1] = publisher
+  end
+  if vim.tbl_isempty(parts) then
+    return ""
+  end
+  return table.concat(parts, ": ")
+end
+
+---@param value string|nil
+---@return string
+local function ensure_link(value)
+  if type(value) ~= "string" or value == "" then
+    return ""
+  end
+  if value:match("^https?://") then
+    return value
+  end
+  return ("https://doi.org/%s"):format(value)
+end
+
+---@param entry SnacksBibtexEntry
+---@param values table
+---@return string
+local function build_apa_in_text(entry, values)
+  local label = values.authors.in_text
+  if label == "" then
+    label = values.organization ~= "" and values.organization or ""
+  end
+  if label == "" then
+    label = values.editors.in_text or values.editors.families or ""
+  end
+  if label == "" then
+    label = entry.key or ""
+  end
+  local year = values.year
+  if label == "" and year == "" then
+    return entry.key or ""
+  elseif label == "" then
+    return ("(%s)"):format(year)
+  elseif year == "" then
+    return ("(%s)"):format(label)
+  end
+  return ("(%s, %s)"):format(label, year)
+end
+
+---@param entry SnacksBibtexEntry
+---@param values table
+---@return string
+local function build_apa_reference(entry, values)
+  local fields = entry.fields or {}
+  local segments = {}
+  local contributor = values.authors.reference
+  if contributor == "" then
+    contributor = values.organization
+  end
+  if contributor == "" then
+    contributor = values.editors.reference
+  end
+  local year = values.year
+  if contributor ~= "" then
+    if year ~= "" then
+      segments[#segments + 1] = ("%s (%s)."):format(contributor, year)
+    else
+      segments[#segments + 1] = contributor .. "."
+    end
+  elseif year ~= "" then
+    segments[#segments + 1] = ("(%s)."):format(year)
+  end
+
+  local title = latex_trim(fields.title)
+  if title ~= "" then
+    if not title:match("[%.!?]$") then
+      title = title .. "."
+    end
+    segments[#segments + 1] = title
+  end
+
+  local entry_type = (entry.type or ""):lower()
+  if entry_type == "article" or entry_type == "articleinpress" then
+    local journal = latex_trim(fields.journal or fields.journaltitle or "")
+    if journal ~= "" then
+      local journal_segment = journal
+      local volume = latex_trim(fields.volume)
+      local issue = latex_trim(fields.number or fields.issue or "")
+      local pages = normalize_page_range(fields.pages or fields.page or "")
+      if volume ~= "" then
+        journal_segment = journal_segment .. ", " .. volume
+        if issue ~= "" then
+          journal_segment = journal_segment .. "(" .. issue .. ")"
+        end
+      end
+      if pages ~= "" then
+        journal_segment = journal_segment .. ", " .. pages
+      end
+      if not journal_segment:match("[%.!?]$") then
+        journal_segment = journal_segment .. "."
+      end
+      segments[#segments + 1] = journal_segment
+    end
+  elseif entry_type == "incollection" or entry_type == "inbook" or entry_type == "inproceedings" then
+    local editors = values.editors.collection
+    local booktitle = latex_trim(fields.booktitle)
+    local pages = format_collection_pages(fields.pages or fields.page or "")
+    local parts = {}
+    if editors ~= "" then
+      local label = (#values.editors.list > 1) and "(Eds.)," or "(Ed.),"
+      parts[#parts + 1] = ("In %s %s"):format(editors, label)
+    elseif booktitle ~= "" then
+      parts[#parts + 1] = "In"
+    end
+    if booktitle ~= "" then
+      local book_segment = booktitle
+      if pages ~= "" then
+        book_segment = ("%s (%s)"):format(book_segment, pages)
+        pages = ""
+      end
+      parts[#parts + 1] = book_segment
+    end
+    if pages ~= "" then
+      parts[#parts + 1] = ("%s"):format(pages)
+    end
+    if not vim.tbl_isempty(parts) then
+      local sentence = table.concat(parts, " ")
+      if not sentence:match("[%.!?]$") then
+        sentence = sentence .. "."
+      end
+      segments[#segments + 1] = sentence
+    end
+    local publisher_segment = build_publisher_segment(latex_trim(fields.location or fields.address or ""), latex_trim(fields.publisher))
+    if publisher_segment ~= "" then
+      if not publisher_segment:match("[%.!?]$") then
+        publisher_segment = publisher_segment .. "."
+      end
+      segments[#segments + 1] = publisher_segment
+    end
+  else
+    local publisher_segment = build_publisher_segment(latex_trim(fields.location or fields.address or ""), latex_trim(fields.publisher))
+    if publisher_segment ~= "" then
+      if not publisher_segment:match("[%.!?]$") then
+        publisher_segment = publisher_segment .. "."
+      end
+      segments[#segments + 1] = publisher_segment
+    end
+  end
+
+  local doi = latex_trim(fields.doi)
+  local url = latex_trim(fields.url)
+  local link = doi ~= "" and ensure_link(doi) or url
+  if link ~= "" then
+    segments[#segments + 1] = link
+  end
+
+  return table.concat(segments, " ")
+end
+
+ensure_template_values = function(entry)
+  if not entry then
+    return nil
+  end
+  if entry._sb_template_values then
+    return entry._sb_template_values
+  end
+  local fields = entry.fields or {}
+  local authors = build_person_meta(parse_name_list(fields.author))
+  local editors = build_person_meta(parse_name_list(fields.editor))
+  local values = {
+    authors = authors,
+    editors = editors,
+    organization = latex_trim(fields.organization or fields.institution or fields.publisher or ""),
+    year = build_year_text(fields),
+    title = latex_trim(fields.title),
+    journal = latex_trim(fields.journal or fields.journaltitle or ""),
+    booktitle = latex_trim(fields.booktitle or ""),
+    publisher = latex_trim(fields.publisher or ""),
+    location = latex_trim(fields.location or fields.address or ""),
+    pages = normalize_page_range(fields.pages or fields.page or ""),
+    pages_collection = format_collection_pages(fields.pages or fields.page or ""),
+    volume = latex_trim(fields.volume or ""),
+    issue = latex_trim(fields.number or fields.issue or ""),
+    doi = latex_trim(fields.doi or ""),
+    url = latex_trim(fields.url or ""),
+    edition = latex_trim(fields.edition or ""),
+    series = latex_trim(fields.series or ""),
+  }
+  values.apa = {
+    in_text = build_apa_in_text(entry, values),
+    reference = build_apa_reference(entry, values),
+  }
+  entry._sb_template_values = values
+  return values
 end
 
 local function enabled_citation_commands(cfg)
@@ -845,6 +1408,7 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, parent_p
     if format.description and format.description ~= "" then
       lines[#lines + 1] = format.description
     end
+    local sample = apply_citation_template(entry, format.template, resolve_default_citation_template(cfg))
     items[#items + 1] = {
       format = format,
       text = table.concat(lines, " · "),
@@ -852,6 +1416,8 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, parent_p
       description = format.description,
       category = format.category,
       locale = format.locale,
+      sample = sample,
+      preview = sample ~= "" and { text = sample, ft = "text" } or nil,
     }
   end
 
@@ -868,6 +1434,9 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, parent_p
       end
       if item.description and item.description ~= "" then
         parts[#parts + 1] = { item.description, "Comment" }
+      end
+      if item.sample and item.sample ~= "" then
+        parts[#parts + 1] = { item.sample, "String" }
       end
       return { parts }
     end,
