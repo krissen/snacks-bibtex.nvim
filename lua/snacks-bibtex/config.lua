@@ -42,7 +42,7 @@ local function init_defaults()
     depth = 1,
     files = nil,
     global_files = {},
-    search_fields = { "author", "title", "year" },
+    search_fields = { "author", "title", "year", "journal", "journaltitle", "editor" },
     format = "@%s",
     preview_format = "{{author}} ({{year}}), {{title}}",
     citation_format = "{{author}} ({{year}})",

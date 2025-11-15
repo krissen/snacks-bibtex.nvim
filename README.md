@@ -61,7 +61,7 @@ require("snacks-bibtex").setup({
   depth = 1,                        -- recursion depth for project search (nil for unlimited)
   files = nil,                      -- explicit list of project-local bib files
   global_files = {},                -- list of additional bib files
-  search_fields = { "author", "title", "year" },
+  search_fields = { "author", "title", "year", "journal", "journaltitle", "editor" },
   format = "@%s",                   -- how keys are inserted with <CR>
   preview_format = "{{author}} ({{year}}), {{title}}",
   citation_format = "{{author}} ({{year}})",
