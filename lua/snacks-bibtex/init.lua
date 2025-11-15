@@ -11,6 +11,10 @@ local history ---@type table<string, { count: integer, last: integer }>
 local history_loaded = false
 local history_dirty = false
 
+---Forward declaration so helper functions can reference the insertion utility before it is defined.
+---@type fun(picker: snacks.Picker|nil, text: string|nil)|nil
+local insert_text
+
 local insert_modes = {
   i = true,
   ic = true,
@@ -1759,7 +1763,7 @@ end
 ---the caller's editing mode when applicable.
 ---@param picker snacks.Picker
 ---@param text string
-local function insert_text(picker, text)
+insert_text = function(picker, text)
   if not text or text == "" then
     return
   end
