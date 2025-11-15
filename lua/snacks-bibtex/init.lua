@@ -1388,7 +1388,7 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, parent
   })
 end
 
----Open a citation format picker that applies templates and updates history.
+---Open a citation format picker that applies templates, shows live previews, and updates history.
 ---@param snacks snacks.picker
 ---@param entry SnacksBibtexEntry
 ---@param formats SnacksBibtexCitationFormat[]
@@ -1440,6 +1440,7 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, parent_p
       end
       return { parts }
     end,
+    preview = "preview",
     actions = {
       apply_citation_format = function(picker, item)
         if not item or not item.format then

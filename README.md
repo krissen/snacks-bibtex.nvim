@@ -59,7 +59,7 @@ Key | Action
 `<C-c>` | Open the citation command picker covering the full BibTeX/natbib/BibLaTeX catalogue.
 `<C-s>` | Insert the default in-text citation format (APA 7 in English by default).
 `<C-r>` | Insert the default reference-list citation format (APA 7 in English by default).
-`<C-y>` | Open the citation format picker (APA, Harvard, Oxford templates included).
+`<C-y>` | Open the citation format picker (APA, Harvard, Oxford templates included with live preview).
 `<C-f>` | Open a secondary picker to choose and insert a single field value.
 
 `<CR>` works from both the search prompt and the results list, and snacks-bibtex overrides Snacks' default confirm action so Enter always inserts into the buffer you launched the picker from instead of opening the BibTeX source. All insertion shortcuts write into that original buffer and window, and the picker restores your previous insert/replace mode so trigger mappings can safely run without leaving you in normal mode.
