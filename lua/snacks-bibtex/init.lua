@@ -1298,7 +1298,7 @@ local function resolve_default_citation_template(cfg)
   return cfg.preview_format
 end
 
----Open a citation command picker that applies templates and updates history.
+---Open a citation command picker that applies templates, renders previews, and updates history.
 ---@param snacks snacks.picker
 ---@param entry SnacksBibtexEntry
 ---@param commands SnacksBibtexCitationCommand[]
@@ -1316,6 +1316,7 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, parent
     local description = command.description
     local packages = command.packages
     local template = command.template
+    local sample = apply_citation_template(entry, template, resolve_default_citation_template(cfg)) or ""
     local lines = {}
     if show_command then
       lines[#lines + 1] = command.command
@@ -1339,6 +1340,11 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, parent
       description = description,
       packages = packages,
       template = template,
+      sample = sample,
+      preview = {
+        text = sample ~= "" and sample or "(empty citation)",
+        ft = "text",
+      },
     }
   end
 
@@ -1359,11 +1365,15 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, parent
       if show_description and item.description and item.description ~= "" then
         parts[#parts + 1] = { item.description, "Comment" }
       end
+      if item.sample and item.sample ~= "" then
+        parts[#parts + 1] = { item.sample, "String" }
+      end
       if vim.tbl_isempty(parts) then
         parts[#parts + 1] = { item.command.command }
       end
       return { parts }
     end,
+    preview = "preview",
     actions = {
       apply_citation_command = function(picker, item)
         if not item or not item.command then
@@ -1408,7 +1418,7 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, parent_p
     if format.description and format.description ~= "" then
       lines[#lines + 1] = format.description
     end
-    local sample = apply_citation_template(entry, format.template, resolve_default_citation_template(cfg))
+    local sample = apply_citation_template(entry, format.template, resolve_default_citation_template(cfg)) or ""
     items[#items + 1] = {
       format = format,
       text = table.concat(lines, " · "),
@@ -1417,7 +1427,10 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, parent_p
       category = format.category,
       locale = format.locale,
       sample = sample,
-      preview = sample ~= "" and { text = sample, ft = "text" } or nil,
+      preview = {
+        text = sample ~= "" and sample or "(empty citation)",
+        ft = "text",
+      },
     }
   end
 

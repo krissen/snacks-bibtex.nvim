@@ -11,7 +11,7 @@ Scan local and global `*.bib` files, preview entries, and insert citation keys o
 - Ready-made actions for inserting keys, full entries, formatted citations, or individual fields.
 - Quick shortcuts for `\cite`, `\citep`, `\citet`, and formatted APA/Harvard/Oxford references (with pickers for the full catalogues).
 - APA 7 templates derive family-name in-text citations plus reference entries with editors, publishers, page ranges, and DOI/URL details when available.
-- Citation format pickers preview the rendered text for the highlighted entry so you can confirm before inserting.
+- Citation command and format pickers preview the rendered text for the highlighted entry so you can confirm before inserting.
 - Customisable mappings and picker options via Lua.
 - Toggle which metadata columns the citation command picker displays (packages, descriptions, templates).
 
@@ -244,6 +244,8 @@ require("snacks-bibtex").setup({
 ```
 
 The command name is always displayed, while descriptions, packages, and templates can be toggled on or off as needed.
+
+The command picker preview pane renders the highlighted command's output for the current entry so you can verify the exact cite string before inserting.
 
 #### Bundled command catalogue
 
