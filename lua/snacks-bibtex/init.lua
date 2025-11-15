@@ -1313,7 +1313,8 @@ local function resolve_default_citation_template(cfg)
 end
 
 ---Open a citation command picker that applies templates, renders previews, and produces highlight-aware list rows.
----The formatter returns explicit highlight segments so Snacks renders each column safely.
+---The formatter returns explicit highlight segments so Snacks renders each column safely and wires `<CR>` to the custom
+---confirm handler so selections always insert into the originating buffer instead of jumping to a file.
 ---@param snacks snacks.picker
 ---@param entry SnacksBibtexEntry
 ---@param commands SnacksBibtexCitationCommand[]
@@ -1363,6 +1364,20 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, parent
     }
   end
 
+  local function apply_command_action(picker, item)
+    item = item or (picker and picker:current())
+    if not item or not item.command then
+      return
+    end
+    local text = apply_citation_template(entry, item.command.template, resolve_default_citation_template(cfg))
+    insert_text(parent_picker, text)
+    record_entry_usage(entry.key)
+    picker:close()
+    if close_parent then
+      close_parent()
+    end
+  end
+
   snacks.picker({
     title = display.title or "Citation commands",
     items = items,
@@ -1403,23 +1418,13 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, parent
     end,
     preview = "preview",
     actions = {
-      apply_citation_command = function(picker, item)
-        if not item or not item.command then
-          return
-        end
-        local text = apply_citation_template(entry, item.command.template, resolve_default_citation_template(cfg))
-        insert_text(parent_picker, text)
-        record_entry_usage(entry.key)
-        picker:close()
-        if close_parent then
-          close_parent()
-        end
-      end,
+      apply_citation_command = apply_command_action,
+      confirm = apply_command_action,
     },
     win = {
       list = {
         keys = {
-          ["<CR>"] = "apply_citation_command",
+          ["<CR>"] = "confirm",
         },
       },
     },
@@ -1427,7 +1432,8 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, parent
 end
 
 ---Open a citation format picker that applies templates, shows live previews, and surfaces human readable metadata in the list.
----The formatter returns explicit highlight segments so Snacks renders each column safely.
+---The formatter returns explicit highlight segments so Snacks renders each column safely and hooks `<CR>` into the same
+---confirm handler so selections always insert back into the launch buffer.
 ---@param snacks snacks.picker
 ---@param entry SnacksBibtexEntry
 ---@param formats SnacksBibtexCitationFormat[]
@@ -1461,6 +1467,20 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, parent_p
         ft = "text",
       },
     }
+  end
+
+  local function apply_format_action(picker, item)
+    item = item or (picker and picker:current())
+    if not item or not item.format then
+      return
+    end
+    local text = apply_citation_template(entry, item.format.template, resolve_default_citation_template(cfg))
+    insert_text(parent_picker, text)
+    record_entry_usage(entry.key)
+    picker:close()
+    if close_parent then
+      close_parent()
+    end
   end
 
   snacks.picker({
@@ -1498,23 +1518,13 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, parent_p
     end,
     preview = "preview",
     actions = {
-      apply_citation_format = function(picker, item)
-        if not item or not item.format then
-          return
-        end
-        local text = apply_citation_template(entry, item.format.template, resolve_default_citation_template(cfg))
-        insert_text(parent_picker, text)
-        record_entry_usage(entry.key)
-        picker:close()
-        if close_parent then
-          close_parent()
-        end
-      end,
+      apply_citation_format = apply_format_action,
+      confirm = apply_format_action,
     },
     win = {
       list = {
         keys = {
-          ["<CR>"] = "apply_citation_format",
+          ["<CR>"] = "confirm",
         },
       },
     },

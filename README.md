@@ -252,6 +252,7 @@ The command name is always displayed, while descriptions, packages, and template
 Each row renders the enabled columns inline together with a sample citation snippet so you can see what will be inserted before confirming.
 
 The command picker preview pane renders the highlighted command's output for the current entry so you can verify the exact cite string before inserting.
+Press `<CR>` to apply the highlighted command; snacks-bibtex overrides Snacks' default confirm action so the picker always writes back into the buffer where you launched it.
 All bundled templates render canonical snippets such as `\cite{key}` without extra whitespace inside the braces so inserted commands follow common LaTeX style guides out of the box.
 
 #### Bundled command catalogue
@@ -265,7 +266,9 @@ The plugin ships ready-to-enable templates for every `\cite`-family command prov
 
 ### Citation formats
 
-`<C-s>` and `<C-r>` insert ready-made textual reference templates. `<C-y>` opens a picker listing every enabled format with descriptive labels and per-entry samples. APA 7 (in-text and reference), Harvard (in-text and reference), and Oxford (reference) ship enabled by default so you can compare them immediately.
+`<C-s>` and `<C-r>` insert ready-made textual reference templates. `<C-y>` opens a picker listing every enabled format with descriptive labels and per-entry samples.
+Press `<CR>` to apply the highlighted format—just like the command picker, the confirm action inserts into the originating buffer rather than attempting to jump to a source file.
+APA 7 (in-text and reference), Harvard (in-text and reference), and Oxford (reference) ship enabled by default so you can compare them immediately.
 
 The bundled APA 7 presets derive family-name-only in-text citations and assemble reference entries with editors, book titles, publishers, page ranges, and DOI/URL links whenever that data exists.
 
