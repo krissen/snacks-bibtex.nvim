@@ -1,6 +1,6 @@
 # snacks-bibtex.nvim
 
-A lightweight BibTeX picker for [folke/snacks.nvim](https://github.com/folke/snacks.nvim)'s picker API.  
+A lightweight BibTeX picker for [folke/snacks.nvim](https://github.com/folke/snacks.nvim)'s picker API, available at [krissen/snacks-bibtex.nvim](https://github.com/krissen/snacks-bibtex.nvim).
 Scan local and global `*.bib` files, preview entries, and insert citation keys or formatted references without leaving Neovim.
 
 ## Features
@@ -11,6 +11,7 @@ Scan local and global `*.bib` files, preview entries, and insert citation keys o
 - Ready-made actions for inserting keys, full entries, formatted citations, or individual fields.
 - Quick shortcuts for `\cite`, `\citep`, `\citet`, and formatted APA/Harvard/Oxford references (with pickers for the full catalogues).
 - Customisable mappings and picker options via Lua.
+- Toggle which metadata columns the citation command picker displays (packages, descriptions, templates).
 
 ## Installation
 
@@ -24,7 +25,7 @@ Use your favourite plugin manager. With [`lazy.nvim`](https://github.com/folke/l
   },
 },
 {
-  "kristijanhusak/snacks-bibtex.nvim",
+  "krissen/snacks-bibtex.nvim",
   dependencies = { "folke/snacks.nvim" },
   opts = {
     -- optional overrides (see below)
@@ -76,6 +77,12 @@ require("snacks-bibtex").setup({
   citation_format_defaults = {
     in_text = "apa7_in_text",       -- default for <C-s>
     reference = "apa7_reference",   -- default for <C-r>
+  },
+  citation_command_picker = {
+    title = "Citation commands",    -- picker title (set to false/nil to use default)
+    packages = true,                 -- show the required packages column
+    description = true,              -- show human-readable descriptions
+    template = false,                -- include the raw template text
   },
   locale = "en",                    -- preferred locale for textual formats
   citation_commands = {             -- toggle citation templates or add your own
@@ -164,6 +171,23 @@ require("snacks-bibtex").setup({
   },
 })
 ```
+
+#### Command picker display
+
+Tweak which columns the citation command picker shows via `citation_command_picker`:
+
+```lua
+require("snacks-bibtex").setup({
+  citation_command_picker = {
+    title = "BibTeX command palette",
+    packages = false,  -- hide required packages to declutter
+    description = true,
+    template = true,   -- show the raw template snippet instead
+  },
+})
+```
+
+The command name is always displayed, while descriptions, packages, and templates can be toggled on or off as needed.
 
 #### Bundled command catalogue
 

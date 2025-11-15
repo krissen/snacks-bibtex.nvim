@@ -10,6 +10,7 @@ local M = {}
 ---@field citation_format? string     # template used when inserting formatted citations
 ---@field default_citation_format? string  # id of the default citation format template
 ---@field citation_format_defaults? { in_text?: string, reference?: string }
+---@field citation_command_picker? { title?: string, command?: boolean, description?: boolean, packages?: boolean, template?: boolean }
 ---@class SnacksBibtexCitationCommand
 ---@field command string
 ---@field template string
@@ -131,6 +132,13 @@ local function init_defaults()
     citation_format_defaults = {
       in_text = "apa7_in_text",
       reference = "apa7_reference",
+    },
+    citation_command_picker = {
+      title = "Citation commands",
+      command = true,
+      description = true,
+      packages = true,
+      template = false,
     },
     locale = "en",
     mappings = {},

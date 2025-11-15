@@ -194,16 +194,31 @@ local function resolve_default_citation_template(cfg)
 end
 
 local function open_citation_command_picker(snacks, entry, commands, cfg, close_parent)
+  local display = cfg.citation_command_picker or {}
+  local show_command = display.command ~= false
+  local show_description = display.description ~= false
+  local show_packages = display.packages ~= false
+  local show_template = display.template == true
   local items = {}
   for _, command in ipairs(commands) do
     local description = command.description
     local packages = command.packages
-    local lines = { command.command }
-    if packages and packages ~= "" then
+    local template = command.template
+    local lines = {}
+    if show_command then
+      lines[#lines + 1] = command.command
+    end
+    if show_packages and packages and packages ~= "" then
       lines[#lines + 1] = ("Packages: %s"):format(packages)
     end
-    if description and description ~= "" then
+    if show_template and template and template ~= "" then
+      lines[#lines + 1] = ("Template: %s"):format(template)
+    end
+    if show_description and description and description ~= "" then
       lines[#lines + 1] = description
+    end
+    if vim.tbl_isempty(lines) then
+      lines[#lines + 1] = command.command
     end
     items[#items + 1] = {
       command = command,
@@ -211,19 +226,29 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, close_
       label = command.command,
       description = description,
       packages = packages,
+      template = template,
     }
   end
 
   snacks.picker({
-    title = "Citation commands",
+    title = display.title or "Citation commands",
     items = items,
     format = function(item)
-      local parts = { { item.label } }
-      if item.packages and item.packages ~= "" then
+      local parts = {}
+      if show_command then
+        parts[#parts + 1] = { item.command.command }
+      end
+      if show_packages and item.packages and item.packages ~= "" then
         parts[#parts + 1] = { ("[%s]"):format(item.packages), "Comment" }
       end
-      if item.description and item.description ~= "" then
+      if show_template and item.template and item.template ~= "" then
+        parts[#parts + 1] = { item.template, "String" }
+      end
+      if show_description and item.description and item.description ~= "" then
         parts[#parts + 1] = { item.description, "Comment" }
+      end
+      if vim.tbl_isempty(parts) then
+        parts[#parts + 1] = { item.command.command }
       end
       return { parts }
     end,
