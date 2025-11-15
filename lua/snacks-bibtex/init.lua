@@ -1313,6 +1313,7 @@ local function resolve_default_citation_template(cfg)
 end
 
 ---Open a citation command picker that applies templates, renders previews, and produces highlight-aware list rows.
+---The formatter returns explicit highlight segments so Snacks renders each column safely.
 ---@param snacks snacks.picker
 ---@param entry SnacksBibtexEntry
 ---@param commands SnacksBibtexCitationCommand[]
@@ -1372,12 +1373,12 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, parent
           return
         end
         if #parts > 0 then
-          parts[#parts + 1] = " "
+          parts[#parts + 1] = { " " }
         end
         if hl then
           parts[#parts + 1] = { text, hl }
         else
-          parts[#parts + 1] = text
+          parts[#parts + 1] = { text }
         end
       end
       if show_command then
@@ -1426,6 +1427,7 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, parent
 end
 
 ---Open a citation format picker that applies templates, shows live previews, and surfaces human readable metadata in the list.
+---The formatter returns explicit highlight segments so Snacks renders each column safely.
 ---@param snacks snacks.picker
 ---@param entry SnacksBibtexEntry
 ---@param formats SnacksBibtexCitationFormat[]
@@ -1471,12 +1473,12 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, parent_p
           return
         end
         if #parts > 0 then
-          parts[#parts + 1] = " "
+          parts[#parts + 1] = { " " }
         end
         if hl then
           parts[#parts + 1] = { text, hl }
         else
-          parts[#parts + 1] = text
+          parts[#parts + 1] = { text }
         end
       end
       append(item.label)

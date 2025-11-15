@@ -59,7 +59,7 @@ Key | Action
 `<C-c>` | Open the citation command picker covering the full BibTeX/natbib/BibLaTeX catalogue.
 `<C-s>` | Insert the default in-text citation format (APA 7 in English by default).
 `<C-r>` | Insert the default reference-list citation format (APA 7 in English by default).
-`<C-y>` | Open the citation format picker (APA, Harvard, Oxford templates included with live previews and labelled list entries).
+`<C-y>` | Open the citation format picker (APA, Harvard, Oxford templates included with live previews, labelled rows, and inline samples).
 `<C-f>` | Open a secondary picker to choose and insert a single field value.
 
 `<CR>` works from both the search prompt and the results list, and snacks-bibtex overrides Snacks' default confirm action so Enter always inserts into the buffer you launched the picker from instead of opening the BibTeX source. All insertion shortcuts write into that original buffer and window, and the picker restores your previous insert/replace mode so trigger mappings can safely run without leaving you in normal mode.
@@ -249,6 +249,7 @@ require("snacks-bibtex").setup({
 ```
 
 The command name is always displayed, while descriptions, packages, and templates can be toggled on or off as needed.
+Each row renders the enabled columns inline together with a sample citation snippet so you can see what will be inserted before confirming.
 
 The command picker preview pane renders the highlighted command's output for the current entry so you can verify the exact cite string before inserting.
 All bundled templates render canonical snippets such as `\cite{key}` without extra whitespace inside the braces so inserted commands follow common LaTeX style guides out of the box.
