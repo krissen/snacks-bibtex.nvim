@@ -51,6 +51,93 @@ local function format_template(template, entry)
   end))
 end
 
+local function enabled_citation_commands(cfg)
+  local ret = {}
+  for _, command in ipairs(cfg.citation_commands or {}) do
+    if type(command) == "table" and command.command and command.template and command.enabled ~= false then
+      local packages = command.packages
+      if type(packages) == "table" then
+        packages = table.concat(packages, ", ")
+      end
+      ret[#ret + 1] = {
+        command = command.command,
+        template = command.template,
+        description = command.description,
+        packages = packages,
+      }
+    end
+  end
+  return ret
+end
+
+local function apply_citation_template(entry, template, fallback)
+  local text = format_template(template, entry)
+  if text == "" and fallback and fallback ~= "" then
+    text = format_template(fallback, entry)
+  end
+  if text == "" then
+    text = entry.key or ""
+  end
+  return text
+end
+
+local function open_citation_command_picker(snacks, entry, commands, cfg, close_parent)
+  local items = {}
+  for _, command in ipairs(commands) do
+    local description = command.description
+    local packages = command.packages
+    local lines = { command.command }
+    if packages and packages ~= "" then
+      lines[#lines + 1] = ("Packages: %s"):format(packages)
+    end
+    if description and description ~= "" then
+      lines[#lines + 1] = description
+    end
+    items[#items + 1] = {
+      command = command,
+      text = table.concat(lines, " · "),
+      label = command.command,
+      description = description,
+      packages = packages,
+    }
+  end
+
+  snacks.picker({
+    title = "Citation commands",
+    items = items,
+    format = function(item)
+      local parts = { { item.label } }
+      if item.packages and item.packages ~= "" then
+        parts[#parts + 1] = { ("[%s]"):format(item.packages), "Comment" }
+      end
+      if item.description and item.description ~= "" then
+        parts[#parts + 1] = { item.description, "Comment" }
+      end
+      return { parts }
+    end,
+    actions = {
+      apply_citation_command = function(picker, item)
+        if not item or not item.command then
+          return
+        end
+        local text = apply_citation_template(entry, item.command.template, cfg.citation_format)
+        insert_text(text)
+        picker:close()
+        if close_parent then
+          close_parent()
+        end
+      end,
+    },
+    win = {
+      list = {
+        keys = {
+          ["<CR>"] = "apply_citation_command",
+        },
+      },
+    },
+  })
+end
+
 local function make_item(entry, cfg)
   local fields = entry.fields or {}
   local search_parts = { entry.key }
@@ -146,12 +233,23 @@ local function make_actions(snacks, cfg)
       return
     end
     local entry = item.entry or item
-    local citation = format_template(cfg.citation_format or cfg.preview_format, entry)
-    if citation == "" then
-      citation = entry.key or ""
+    local commands = enabled_citation_commands(cfg)
+    if #commands == 0 then
+      local citation = apply_citation_template(entry, cfg.citation_format or cfg.preview_format, cfg.preview_format)
+      insert_text(citation)
+      picker:close()
+      return
     end
-    insert_text(citation)
-    picker:close()
+    if #commands == 1 then
+      local citation = apply_citation_template(entry, commands[1].template, cfg.citation_format)
+      insert_text(citation)
+      picker:close()
+      return
+    end
+
+    open_citation_command_picker(snacks, entry, commands, cfg, function()
+      picker:close()
+    end)
   end
 
   actions.pick_field = function(_, item)
