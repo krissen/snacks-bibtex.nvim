@@ -125,7 +125,7 @@ local function init_defaults()
     files = nil,
     global_files = {},
     search_fields = { "author", "title", "year", "journal", "journaltitle", "editor" },
-    format = "@%s",
+    format = "%s",
     preview_format = "{{author}} ({{year}}), {{title}}",
     citation_format = "{{author}} ({{year}})",
     default_citation_format = "apa7_in_text",

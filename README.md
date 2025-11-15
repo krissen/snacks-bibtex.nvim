@@ -6,7 +6,7 @@ Scan local and global `*.bib` files, preview entries, and insert citation keys o
 ## Features
 
 - Finds BibTeX entries from the current project and optional global libraries.
-- Search over configurable fields (author, title, year, …).
+- Search over configurable fields (author, title, year, …) with LaTeX accent awareness.
 - Rich preview rendered directly from the BibTeX entry.
 - Ready-made actions for inserting keys, full entries, formatted citations, or individual fields.
 - Quick shortcuts for `\cite`, `\citep`, `\citet`, and formatted APA/Harvard/Oxford references (with pickers for the full catalogues).
@@ -49,7 +49,7 @@ Run `:SnacksBibtex` or call `require("snacks-bibtex").bibtex()` to open the pick
 
 Key | Action
 ----|-------
-`<CR>` | Insert the citation key (formatted with `config.format`, default `@%s`).
+`<CR>` | Insert the citation key (formatted with `config.format`, default `%s`).
 `<C-e>` | Insert the full BibTeX entry at the cursor.
 `<C-a>` | Insert `\cite{<key>}` (generic BibTeX/BibLaTeX citation).
 `<C-p>` | Insert `\citep{<key>}` (natbib parenthetical citation).
@@ -70,7 +70,7 @@ require("snacks-bibtex").setup({
   files = nil,                      -- explicit list of project-local bib files
   global_files = {},                -- list of additional bib files
   search_fields = { "author", "title", "year", "journal", "journaltitle", "editor" },
-  format = "@%s",                   -- how keys are inserted with <CR>
+  format = "%s",                    -- how keys are inserted with <CR>
   preview_format = "{{author}} ({{year}}), {{title}}",
   citation_format = "{{author}} ({{year}})", -- fallback text when no format template is available
   default_citation_format = "apa7_in_text",   -- id from `citation_formats` used as the fallback

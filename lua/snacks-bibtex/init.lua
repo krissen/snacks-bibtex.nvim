@@ -52,6 +52,211 @@ local function format_template(template, entry)
   end))
 end
 
+local latex_accent_map = {
+  ['"'] = {
+    a = "ä",
+    A = "Ä",
+    e = "ë",
+    E = "Ë",
+    i = "ï",
+    I = "Ï",
+    o = "ö",
+    O = "Ö",
+    u = "ü",
+    U = "Ü",
+    y = "ÿ",
+    Y = "Ÿ",
+  },
+  ["'"] = {
+    a = "á",
+    A = "Á",
+    e = "é",
+    E = "É",
+    i = "í",
+    I = "Í",
+    o = "ó",
+    O = "Ó",
+    u = "ú",
+    U = "Ú",
+    y = "ý",
+    Y = "Ý",
+    c = "ć",
+    C = "Ć",
+    n = "ń",
+    N = "Ń",
+  },
+  ["`"] = {
+    a = "à",
+    A = "À",
+    e = "è",
+    E = "È",
+    i = "ì",
+    I = "Ì",
+    o = "ò",
+    O = "Ò",
+    u = "ù",
+    U = "Ù",
+  },
+  ["^"] = {
+    a = "â",
+    A = "Â",
+    e = "ê",
+    E = "Ê",
+    i = "î",
+    I = "Î",
+    o = "ô",
+    O = "Ô",
+    u = "û",
+    U = "Û",
+    c = "ĉ",
+    C = "Ĉ",
+  },
+  ["~"] = {
+    a = "ã",
+    A = "Ã",
+    n = "ñ",
+    N = "Ñ",
+    o = "õ",
+    O = "Õ",
+  },
+  ["="] = {
+    a = "ā",
+    A = "Ā",
+    e = "ē",
+    E = "Ē",
+    i = "ī",
+    I = "Ī",
+    o = "ō",
+    O = "Ō",
+    u = "ū",
+    U = "Ū",
+  },
+  ["."] = {
+    e = "ė",
+    E = "Ė",
+    z = "ż",
+    Z = "Ż",
+  },
+  c = {
+    c = "ç",
+    C = "Ç",
+  },
+  v = {
+    s = "š",
+    S = "Š",
+    c = "č",
+    C = "Č",
+    z = "ž",
+    Z = "Ž",
+  },
+  H = {
+    o = "ő",
+    O = "Ő",
+    u = "ű",
+    U = "Ű",
+  },
+  u = {
+    a = "ă",
+    A = "Ă",
+    e = "ĕ",
+    E = "Ĕ",
+    i = "ĭ",
+    I = "Ĭ",
+    o = "ŏ",
+    O = "Ŏ",
+    u = "ŭ",
+    U = "Ŭ",
+  },
+  k = {
+    a = "ą",
+    A = "Ą",
+    e = "ę",
+    E = "Ę",
+    i = "į",
+    I = "Į",
+    u = "ų",
+    U = "Ų",
+  },
+  b = {
+    o = "ḅ",
+    O = "Ḅ",
+  },
+  d = {
+    a = "ḍ",
+    A = "Ḍ",
+  },
+  r = {
+    a = "ŕ",
+    A = "Ŕ",
+  },
+  t = {
+    s = "ṫ",
+    S = "Ṫ",
+  },
+}
+
+local latex_simple_map = {
+  ["\\aa"] = "å",
+  ["\\AA"] = "Å",
+  ["\\ae"] = "æ",
+  ["\\AE"] = "Æ",
+  ["\\oe"] = "œ",
+  ["\\OE"] = "Œ",
+  ["\\o"] = "ø",
+  ["\\O"] = "Ø",
+  ["\\ss"] = "ß",
+  ["\\l"] = "ł",
+  ["\\L"] = "Ł",
+  ["\\ng"] = "ŋ",
+  ["\\NG"] = "Ŋ",
+  ["\\th"] = "þ",
+  ["\\TH"] = "Þ",
+}
+
+local function apply_latex_accent(cmd, letter)
+  local map = latex_accent_map[cmd]
+  if not map then
+    return letter
+  end
+  return map[letter] or map[letter:lower()] or letter
+end
+
+local function latex_to_unicode(value)
+  if type(value) ~= "string" or value == "" then
+    return ""
+  end
+
+  local text = value
+
+  text = text:gsub("{\\(%a+)}", function(cmd)
+    local seq = "\\" .. cmd
+    return latex_simple_map[seq] or cmd
+  end)
+
+  for seq, replacement in pairs(latex_simple_map) do
+    text = text:gsub(seq, replacement)
+  end
+
+  text = text:gsub("\\([\"'`^~=%.Hckbdruvt])%s*%{(%a)%}", function(cmd, letter)
+    return apply_latex_accent(cmd, letter)
+  end)
+
+  text = text:gsub("\\([\"'`^~=%.Hckbdruvt])(%a)", function(cmd, letter)
+    return apply_latex_accent(cmd, letter)
+  end)
+
+  text = text:gsub("[{}]", "")
+
+  text = text:gsub("\\(%a+)", function(cmd)
+    local seq = "\\" .. cmd
+    return latex_simple_map[seq] or cmd
+  end)
+
+  text = text:gsub("~", " ")
+
+  return text
+end
+
 local function enabled_citation_commands(cfg)
   local ret = {}
   for _, command in ipairs(cfg.citation_commands or {}) do
@@ -344,6 +549,10 @@ local function make_item(entry, cfg)
     local value = fields[name:lower()]
     if value and value ~= "" then
       search_parts[#search_parts + 1] = value
+      local normalized = latex_to_unicode(value)
+      if normalized ~= "" and normalized ~= value then
+        search_parts[#search_parts + 1] = normalized
+      end
     end
   end
   local preview = format_template(cfg.preview_format, entry)
