@@ -398,7 +398,13 @@ local function resolve_default_citation_template(cfg)
   return cfg.preview_format
 end
 
-local function open_citation_command_picker(snacks, entry, commands, cfg, close_parent)
+---@param snacks snacks.picker
+---@param entry SnacksBibtexEntry
+---@param commands SnacksBibtexCitationCommand[]
+---@param cfg SnacksBibtexConfig
+---@param parent_picker snacks.Picker
+---@param close_parent? fun()
+local function open_citation_command_picker(snacks, entry, commands, cfg, parent_picker, close_parent)
   local display = cfg.citation_command_picker or {}
   local show_command = display.command ~= false
   local show_description = display.description ~= false
@@ -463,7 +469,7 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, close_
           return
         end
         local text = apply_citation_template(entry, item.command.template, resolve_default_citation_template(cfg))
-        insert_text(text)
+        insert_text(parent_picker, text)
         picker:close()
         if close_parent then
           close_parent()
@@ -480,7 +486,13 @@ local function open_citation_command_picker(snacks, entry, commands, cfg, close_
   })
 end
 
-local function open_citation_format_picker(snacks, entry, formats, cfg, close_parent)
+---@param snacks snacks.picker
+---@param entry SnacksBibtexEntry
+---@param formats SnacksBibtexCitationFormat[]
+---@param cfg SnacksBibtexConfig
+---@param parent_picker snacks.Picker
+---@param close_parent? fun()
+local function open_citation_format_picker(snacks, entry, formats, cfg, parent_picker, close_parent)
   local items = {}
   for _, format in ipairs(formats) do
     local lines = { format.name }
@@ -525,7 +537,7 @@ local function open_citation_format_picker(snacks, entry, formats, cfg, close_pa
           return
         end
         local text = apply_citation_template(entry, item.format.template, resolve_default_citation_template(cfg))
-        insert_text(text)
+        insert_text(parent_picker, text)
         picker:close()
         if close_parent then
           close_parent()
@@ -587,11 +599,20 @@ local function to_lines(text)
   return lines
 end
 
-local function insert_text(text)
+---@param picker snacks.Picker
+---@param text string
+local function insert_text(picker, text)
   if not text or text == "" then
     return
   end
-  local win = vim.api.nvim_get_current_win()
+  local win
+  if picker and picker.main and vim.api.nvim_win_is_valid(picker.main) then
+    win = picker.main
+  end
+  win = win or vim.api.nvim_get_current_win()
+  if not vim.api.nvim_win_is_valid(win) then
+    return
+  end
   local buf = vim.api.nvim_win_get_buf(win)
   local cursor = vim.api.nvim_win_get_cursor(win)
   local row = cursor[1] - 1
@@ -600,7 +621,10 @@ local function insert_text(text)
   if #lines == 0 then
     return
   end
-  vim.api.nvim_buf_set_text(buf, row, col, row, col, lines)
+  local ok = pcall(vim.api.nvim_buf_set_text, buf, row, col, row, col, lines)
+  if not ok then
+    return
+  end
   local final_row = row + (#lines - 1)
   local final_col
   if #lines == 1 then
@@ -619,7 +643,7 @@ local function make_quick_command_action(cfg, command_entry)
     local entry = item.entry or item
     local fallback = resolve_default_citation_template(cfg)
     local text = apply_citation_template(entry, command_entry.template, fallback)
-    insert_text(text)
+    insert_text(picker, text)
     picker:close()
   end
 end
@@ -632,7 +656,7 @@ local function make_quick_format_action(cfg, format_entry)
     local entry = item.entry or item
     local fallback = resolve_default_citation_template(cfg)
     local text = apply_citation_template(entry, format_entry.template, fallback)
-    insert_text(text)
+    insert_text(picker, text)
     picker:close()
   end
 end
@@ -680,7 +704,7 @@ local function make_actions(snacks, cfg)
         text = formatted
       end
     end
-    insert_text(text)
+    insert_text(picker, text)
     picker:close()
   end
 
@@ -688,7 +712,7 @@ local function make_actions(snacks, cfg)
     if not item then
       return
     end
-    insert_text(item.raw)
+    insert_text(picker, item.raw)
     picker:close()
   end
 
@@ -701,19 +725,19 @@ local function make_actions(snacks, cfg)
     if #commands == 0 then
       local fallback_template = resolve_default_citation_template(cfg)
       local citation = apply_citation_template(entry, fallback_template, cfg.preview_format)
-      insert_text(citation)
+      insert_text(picker, citation)
       picker:close()
       return
     end
     if #commands == 1 then
       local fallback_template = resolve_default_citation_template(cfg)
       local citation = apply_citation_template(entry, commands[1].template, fallback_template)
-      insert_text(citation)
+      insert_text(picker, citation)
       picker:close()
       return
     end
 
-    open_citation_command_picker(snacks, entry, commands, cfg, function()
+    open_citation_command_picker(snacks, entry, commands, cfg, picker, function()
       picker:close()
     end)
   end
@@ -727,24 +751,24 @@ local function make_actions(snacks, cfg)
     if #formats == 0 then
       local fallback_template = resolve_default_citation_template(cfg)
       local text = apply_citation_template(entry, fallback_template, cfg.preview_format)
-      insert_text(text)
+      insert_text(picker, text)
       picker:close()
       return
     end
     if #formats == 1 then
       local fallback_template = resolve_default_citation_template(cfg)
       local text = apply_citation_template(entry, formats[1].template, fallback_template)
-      insert_text(text)
+      insert_text(picker, text)
       picker:close()
       return
     end
 
-    open_citation_format_picker(snacks, entry, formats, cfg, function()
+    open_citation_format_picker(snacks, entry, formats, cfg, picker, function()
       picker:close()
     end)
   end
 
-  actions.pick_field = function(_, item)
+  actions.pick_field = function(picker, item)
     if not item then
       return
     end
@@ -764,6 +788,8 @@ local function make_actions(snacks, cfg)
       vim.notify("No fields available for " .. (item.key or "entry"), vim.log.levels.INFO, { title = "snacks-bibtex" })
       return
     end
+    -- keep a reference to the original picker so field insertions target the source buffer
+    local parent_picker = picker
     snacks.picker({
       title = "BibTeX fields",
       items = fields,
@@ -771,12 +797,12 @@ local function make_actions(snacks, cfg)
         return { { field_item.label or field_item.text } }
       end,
       actions = {
-        insert_field = function(picker, field_item)
+        insert_field = function(field_picker, field_item)
           if not field_item then
             return
           end
-          insert_text(field_item.value)
-          picker:close()
+          insert_text(parent_picker, field_item.value)
+          field_picker:close()
         end,
       },
       win = {

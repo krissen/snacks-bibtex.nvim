@@ -60,6 +60,8 @@ Key | Action
 `<C-y>` | Open the citation format picker (APA, Harvard, Oxford templates included).
 `<C-f>` | Open a secondary picker to choose and insert a single field value.
 
+All insertion shortcuts write into the buffer and window you launched the picker from, so trigger mappings can safely run from insert mode without jumping to the BibTeX file.
+
 You can override keymaps globally via `require("snacks-bibtex").setup({ mappings = { ... } })` or per picker call by passing `mappings` to `bibtex({ ... })`.
 
 ### Configuration
