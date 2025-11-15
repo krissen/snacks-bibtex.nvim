@@ -35,6 +35,8 @@ local M = {}
 
 ---@alias SnacksBibtexMapping string|fun(picker: snacks.Picker, item: snacks.picker.Item)|snacks.picker.Action.spec
 
+---@alias SnacksBibtexResolvedConfig SnacksBibtexConfig
+
 local defaults ---@type SnacksBibtexConfig
 
 local function deepcopy(tbl)

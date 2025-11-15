@@ -599,6 +599,8 @@ local function to_lines(text)
   return lines
 end
 
+---Insert `text` into the window where the picker was launched, falling back to the
+---current picker main window when the origin is no longer available.
 ---@param picker snacks.Picker
 ---@param text string
 local function insert_text(picker, text)
@@ -606,7 +608,9 @@ local function insert_text(picker, text)
     return
   end
   local win
-  if picker and picker.main and vim.api.nvim_win_is_valid(picker.main) then
+  if picker and picker._snacks_bibtex_origin_win and vim.api.nvim_win_is_valid(picker._snacks_bibtex_origin_win) then
+    win = picker._snacks_bibtex_origin_win
+  elseif picker and picker.main and vim.api.nvim_win_is_valid(picker.main) then
     win = picker.main
   end
   win = win or vim.api.nvim_get_current_win()
@@ -830,17 +834,66 @@ local function normalize_mappings(base, overrides)
   return keys
 end
 
+---Attach a keybinding specification to a picker window target.
+---@param target table<string, any>
+---@param key string
+---@param action_name string
+---@param opts table<string, any>?
+local function register_key_spec(target, key, action_name, opts)
+  if not opts or vim.tbl_isempty(opts) then
+    target[key] = action_name
+    return
+  end
+  local spec = vim.deepcopy(opts)
+  spec[1] = action_name
+  target[key] = spec
+end
+
+---Extract key mapping configuration from a mapping definition table.
+---@param map any
+---@return table<string, any>
+local function extract_key_options(map)
+  if type(map) ~= "table" then
+    return {}
+  end
+  local opts = {}
+  for _, name in ipairs({ "mode", "expr", "desc", "silent", "noremap" }) do
+    if map[name] ~= nil then
+      opts[name] = map[name]
+    end
+  end
+  return opts
+end
+
+---Build keymaps for both the picker list window and the search input.
+---@param actions table<string, snacks.picker.Action.spec>
+---@param mappings table<string, any>
+---@param cfg SnacksBibtexResolvedConfig
+---@return table<string, any> list_keys
+---@return table<string, any> input_keys
 local function build_keymaps(actions, mappings, cfg)
   local list_keys = {}
+  local input_keys = {}
   local idx = 1
   for key, action in pairs(mappings) do
+    local key_opts = extract_key_options(action)
     if type(action) == "string" then
-      list_keys[key] = action
+      register_key_spec(list_keys, key, action, key_opts)
+      if not key_opts.mode then
+        key_opts = vim.deepcopy(key_opts)
+        key_opts.mode = { "n", "i" }
+      end
+      register_key_spec(input_keys, key, action, key_opts)
     elseif type(action) == "function" then
       local name = ("user_action_%d"):format(idx)
       idx = idx + 1
       actions[name] = action
-      list_keys[key] = name
+      register_key_spec(list_keys, key, name, key_opts)
+      if not key_opts.mode then
+        key_opts = vim.deepcopy(key_opts)
+        key_opts.mode = { "n", "i" }
+      end
+      register_key_spec(input_keys, key, name, key_opts)
     elseif type(action) == "table" then
       if action.kind == "citation_command" then
         local command = find_citation_command(cfg, { id = action.id, command = action.command }, { enabled_only = true })
@@ -852,7 +905,12 @@ local function build_keymaps(actions, mappings, cfg)
           local action_name = action.action_name or action.name or ("insert_citation_command_" .. ident .. "_" .. idx)
           idx = idx + 1
           actions[action_name] = make_quick_command_action(cfg, command)
-          list_keys[key] = action_name
+          register_key_spec(list_keys, key, action_name, key_opts)
+          if not key_opts.mode then
+            key_opts = vim.deepcopy(key_opts)
+            key_opts.mode = { "n", "i" }
+          end
+          register_key_spec(input_keys, key, action_name, key_opts)
         end
       elseif action.kind == "citation_format" then
         local format_id = action.id or action.format
@@ -874,17 +932,27 @@ local function build_keymaps(actions, mappings, cfg)
           local action_name = action.action_name or action.name or ("insert_citation_format_" .. ident .. "_" .. idx)
           idx = idx + 1
           actions[action_name] = make_quick_format_action(cfg, format)
-          list_keys[key] = action_name
+          register_key_spec(list_keys, key, action_name, key_opts)
+          if not key_opts.mode then
+            key_opts = vim.deepcopy(key_opts)
+            key_opts.mode = { "n", "i" }
+          end
+          register_key_spec(input_keys, key, action_name, key_opts)
         end
       else
         local name = action.action or ("user_action_%d"):format(idx)
         idx = idx + 1
         actions[name] = action
-        list_keys[key] = name
+        register_key_spec(list_keys, key, name, key_opts)
+        if not key_opts.mode then
+          key_opts = vim.deepcopy(key_opts)
+          key_opts.mode = { "n", "i" }
+        end
+        register_key_spec(input_keys, key, name, key_opts)
       end
     end
   end
-  return list_keys
+  return list_keys, input_keys
 end
 
 local function register_with_snacks()
@@ -908,7 +976,7 @@ function M.bibtex(opts)
   end
   opts = vim.deepcopy(opts or {})
   local per_call_mappings = opts.mappings
-  local picker_opts_user = opts.picker
+  local picker_opts_user = opts.picker and vim.deepcopy(opts.picker) or nil
   opts.mappings = nil
   opts.picker = nil
   local cfg = config.resolve(opts)
@@ -930,7 +998,14 @@ function M.bibtex(opts)
   local base_mappings = default_mappings_for_cfg(cfg)
   local mappings = normalize_mappings(base_mappings, cfg.mappings)
   mappings = normalize_mappings(mappings, per_call_mappings)
-  local list_keys = build_keymaps(actions, mappings, cfg)
+  local list_keys, input_keys = build_keymaps(actions, mappings, cfg)
+
+  local origin_win = vim.api.nvim_get_current_win()
+  local user_on_show
+  if picker_opts_user and picker_opts_user.on_show then
+    user_on_show = picker_opts_user.on_show
+    picker_opts_user.on_show = nil
+  end
 
   local picker_opts = vim.tbl_deep_extend("force", {
     title = "BibTeX",
@@ -945,8 +1020,26 @@ function M.bibtex(opts)
       list = {
         keys = list_keys,
       },
+      input = {
+        keys = input_keys,
+      },
     },
+    on_show = function(picker)
+      if origin_win and vim.api.nvim_win_is_valid(origin_win) then
+        picker._snacks_bibtex_origin_win = origin_win
+      end
+    end,
   }, picker_opts_user or {})
+
+  if user_on_show then
+    local base_on_show = picker_opts.on_show
+    picker_opts.on_show = function(picker)
+      if base_on_show then
+        base_on_show(picker)
+      end
+      user_on_show(picker)
+    end
+  end
 
   return Snacks.picker(picker_opts)
 end
