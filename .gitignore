@@ -1,0 +1,20 @@
+# Neovim data directory artifacts
+*.log
+
+# Lua compiled files
+*.luac
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.bak

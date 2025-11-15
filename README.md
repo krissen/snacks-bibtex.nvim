@@ -3,6 +3,8 @@
 A lightweight BibTeX picker for [folke/snacks.nvim](https://github.com/folke/snacks.nvim)'s picker API, available at [krissen/snacks-bibtex.nvim](https://github.com/krissen/snacks-bibtex.nvim).
 Scan local and global `*.bib` files, preview entries, and insert citation keys or formatted references without leaving Neovim.
 
+**Requirements:** Neovim 0.9+ with [folke/snacks.nvim](https://github.com/folke/snacks.nvim) (picker module enabled).
+
 ## Features
 
 - Finds BibTeX entries from the current project and optional global libraries.
