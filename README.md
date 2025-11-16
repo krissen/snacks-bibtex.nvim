@@ -33,7 +33,7 @@ This plugin complements existing tools by providing a universal, on-demand inter
 ## 🔗 Related Projects
 
 ### [telescope-bibtex.nvim](https://github.com/nvim-telescope/telescope-bibtex.nvim)
-- **Similarities**: Both provide fuzzy-finding over BibTeX entries with Telescope/Snacks pickers
+- **Similarities**: Both provide fuzzy-finding over BibTeX entries using their respective picker frameworks (Telescope vs Snacks)
 - **Key differences**: 
   - snacks-bibtex leverages snacks.nvim's picker infrastructure and follows its conventions
   - Built-in citation format templates (APA, Harvard, Oxford) with live preview
