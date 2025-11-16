@@ -1,26 +1,66 @@
-# snacks-bibtex.nvim
+# 📚 snacks-bibtex.nvim
 
-A lightweight BibTeX picker for [folke/snacks.nvim](https://github.com/folke/snacks.nvim)'s picker API, available at [krissen/snacks-bibtex.nvim](https://github.com/krissen/snacks-bibtex.nvim).
+A lightweight BibTeX picker for [folke/snacks.nvim](https://github.com/folke/snacks.nvim)'s picker API.
+
 Scan local and global `*.bib` files, preview entries, and insert citation keys or formatted references without leaving Neovim.
 
-**Requirements:** Neovim 0.9+ with [folke/snacks.nvim](https://github.com/folke/snacks.nvim) (picker module enabled).
+## ✨ Features
 
-## Features
+- 📖 **Flexible BibTeX integration** – Finds entries from project-local and global libraries
+- 🔍 **Smart search** – Configurable fields (author, title, year, …) with LaTeX accent awareness
+- 📝 **Multiple insertion modes** – Citation keys, formatted references, full entries, or individual fields
+- 🎯 **Rich previews** – See BibTeX source and formatted output before inserting
+- ⚡ **Quick shortcuts** – Pre-configured for `\cite`, `\citep`, `\citet`, and common citation formats
+- 🎨 **Citation styles** – APA 7, Harvard, Oxford templates with live preview
+- 🔧 **Highly customizable** – Mappings, sorting, format templates via Lua
+- 📊 **Frecency sorting** – Frequently and recently used entries float to the top
+- 🎭 **Command picker** – Browse and preview the full BibTeX/natbib/BibLaTeX catalog
+- 🧭 **Jump to source** – Navigate directly to BibTeX entries for editing
 
-- Finds BibTeX entries from the current project and optional global libraries.
-- Search over configurable fields (author, title, year, …) with LaTeX accent awareness and field-priority aware ranking.
-- Rich preview rendered directly from the BibTeX entry.
-- Ready-made actions for inserting keys, full entries, formatted citations, or individual fields.
-- Jump directly to the BibTeX source entry when you need to tweak metadata.
-- Quick shortcuts for `\cite`, `\citep`, `\citet`, and formatted APA/Harvard/Oxford references (with pickers for the full catalogs).
-- APA 7 templates derive family-name in-text citations plus reference entries with editors, publishers, page ranges, and DOI/URL details when available.
-- Citation command and format pickers preview the rendered text for the highlighted entry so you can confirm before inserting.
-- Customizable mappings and picker options via Lua.
-- Toggle which metadata columns the citation command picker displays (packages, descriptions, templates).
+## 🤔 Why this plugin?
 
-## Installation
+While [vimtex](https://github.com/lervag/vimtex) combined with completion plugins like [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) provides excellent LaTeX citation support, there are scenarios where a dedicated BibTeX picker is valuable:
 
-Use your favourite plugin manager. With [`lazy.nvim`](https://github.com/folke/lazy.nvim):
+- **Beyond LaTeX** – Writing Markdown, Org-mode, or other formats that use BibTeX but aren't LaTeX documents
+- **Custom workflows** – Manual invocation for citation insertion in any context
+- **Unsupported commands** – Custom `\cite*` variants that completion engines don't recognize
+- **Universal access** – Quick reference lookup regardless of the current document type
+- **Frecency-based ordering** – Automatically prioritize your most-used references
+- **Format flexibility** – Generate APA/Harvard/Oxford citations outside of LaTeX compilation
+
+This plugin complements existing tools by providing a universal, on-demand interface to your BibTeX libraries.
+
+## 🔗 Related Projects
+
+### [telescope-bibtex.nvim](https://github.com/nvim-telescope/telescope-bibtex.nvim)
+- **Similarities**: Both provide fuzzy-finding over BibTeX entries with Telescope/Snacks pickers
+- **Key differences**: 
+  - snacks-bibtex leverages snacks.nvim's picker infrastructure and follows its conventions
+  - Built-in citation format templates (APA, Harvard, Oxford) with live preview
+  - Frecency tracking for frequently-used entries
+  - Field-priority aware matching and sorting
+  - Direct integration with citation command catalog
+- **Choose telescope-bibtex if**: You're already using Telescope and prefer its ecosystem
+- **Choose snacks-bibtex if**: You're using snacks.nvim or want advanced formatting features
+
+### [cmp-bibtex](https://github.com/crispgm/cmp-bibtex)
+- **Purpose**: Completion source for nvim-cmp
+- **Complementary use**: cmp-bibtex for inline completion while typing, snacks-bibtex for manual invocation and format browsing
+- **Key difference**: cmp-bibtex is completion-driven; snacks-bibtex is command/picker-driven
+
+### [vimtex](https://github.com/lervag/vimtex)
+- **Purpose**: Comprehensive LaTeX editing environment
+- **Integration**: Works alongside vimtex for enhanced citation workflow
+- **Key difference**: vimtex focuses on complete LaTeX support; snacks-bibtex specializes in BibTeX citation insertion across file types
+
+## ⚡ Requirements
+
+- **Neovim** >= 0.9
+- [folke/snacks.nvim](https://github.com/folke/snacks.nvim) with picker module enabled
+
+## 📦 Installation
+
+### [lazy.nvim](https://github.com/folke/lazy.nvim)
 
 ```lua
 {
@@ -48,9 +88,20 @@ Use your favourite plugin manager. With [`lazy.nvim`](https://github.com/folke/l
 },
 ```
 
-## Usage
+### Other plugin managers
 
-Run `:SnacksBibtex` or call `require("snacks-bibtex").bibtex()` to open the picker. Default actions inside the picker:
+For [vim-plug](https://github.com/junegunn/vim-plug), [packer.nvim](https://github.com/wbthomason/packer.nvim), or manual installation, ensure:
+1. [folke/snacks.nvim](https://github.com/folke/snacks.nvim) is installed with `picker` module enabled
+2. Clone or install `snacks-bibtex.nvim`
+3. Call `require("snacks-bibtex").setup(opts)` in your config
+
+## 🚀 Usage
+
+Run `:SnacksBibtex` or call `require("snacks-bibtex").bibtex()` to open the picker.
+
+### Default keybindings
+
+Default actions inside the picker:
 
 Key | Action
 ----|-------
@@ -72,7 +123,7 @@ The citation format picker renders each enabled template for the highlighted ent
 
 You can override keymaps globally via `require("snacks-bibtex").setup({ mappings = { ... } })` or per picker call by passing `mappings` to `bibtex({ ... })`. Custom mappings are automatically applied to both the results list and the search prompt unless you provide explicit `mode` options.
 
-### Configuration
+## ⚙️ Configuration
 
 ```lua
 require("snacks-bibtex").setup({
@@ -119,7 +170,7 @@ require("snacks-bibtex").setup({
 
 Paths supplied through `files` or `global_files` may include `~` or environment variables (for example `"~/Documents/library.bib"` or `"$ZOTERO_HOME/export.bib"`); snacks-bibtex expands these before attempting to read the files.
 
-#### Sorting and frecency
+### Sorting and frecency
 
 Every successful insertion updates a small history file at `vim.fn.stdpath("data") .. "/snacks-bibtex/history.json"`. The
 default `sort` configuration ranks entries by frecency (a blend of usage count and recent activity), then by author and year,
@@ -161,16 +212,15 @@ require("snacks-bibtex").setup({
 Removing the `frecency` rule gives you a purely alphabetical picker; keeping it ensures the most frequently used entries float
 to the top automatically.
 
-If the stored history file contains timestamps that appear to come from the future (for example after the system clock moves
-backwards), snacks-bibtex warns once during the next session and ignores the negative age so frecency ordering remains stable.
+If the stored history file contains timestamps that appear to come from the future (for example after the system clock moves backwards), snacks-bibtex warns once during the next session and ignores the negative age so frecency ordering remains stable.
 
-#### Parser robustness
+### Parser robustness
 
 The parser keeps track of brace balance with a net counter and honors escaped quotes, allowing it to process nested fields and
 quoted values reliably. Author/editor names are split only on the literal lowercase ` and ` separator at brace depth zero, so
 capitalized words that contain “And” stay intact while still following BibTeX’s requirements.
 
-### Citation commands
+## 📋 Citation Commands
 
 Pressing `<C-c>` opens a dedicated picker with all enabled citation templates. Each row shows the command, required packages (if any), description, and a rendered sample for the highlighted entry so you can confirm the output before inserting. By default the following commands are active:
 
@@ -190,7 +240,7 @@ Pressing `<C-c>` opens a dedicated picker with all enabled citation templates. E
 
 All other BibTeX, natbib, and BibLaTeX `\cite*` variants ship with the plugin but are disabled by default to keep the picker concise.
 
-#### Enable more commands
+### Enable more commands
 
 To enable additional templates, copy the defaults, toggle `enabled`, and pass the result back into `setup`. The snippet below enables every bundled command and adds a custom Pandoc cite style:
 
@@ -227,7 +277,7 @@ end
 require("snacks-bibtex").setup(cfg)
 ```
 
-#### Quick command shortcuts
+### Quick command shortcuts
 
 The picker binds the most common citation commands out of the box:
 
@@ -247,7 +297,7 @@ require("snacks-bibtex").setup({
 })
 ```
 
-#### Command picker display
+### Command picker display
 
 Tweak which columns the citation command picker shows via `citation_command_picker`:
 
@@ -269,7 +319,7 @@ The command picker preview pane renders the highlighted command's output for the
 Press `<CR>` to apply the highlighted command; snacks-bibtex overrides Snacks' default confirm action so the picker always writes back into the buffer where you launched it.
 All bundled templates render canonical snippets such as `\cite{key}` without extra whitespace inside the braces so inserted commands follow common LaTeX style guides out of the box.
 
-#### Bundled command catalog
+### Bundled command catalog
 
 The plugin ships ready-to-enable templates for every `\cite`-family command provided by BibTeX, natbib, and BibLaTeX. Commands are grouped below for convenience:
 
@@ -278,7 +328,7 @@ The plugin ships ready-to-enable templates for every `\cite`-family command prov
 - **BibLaTeX single-entry**: `\cite`, `\cite*`, `\Cite`, `\Cite*`, `\parencite`, `\parencite*`, `\Parencite`, `\Parencite*`, `\footcite`, `\footcite*`, `\Footcite`, `\Footcite*`, `\footcitetext`, `\footfullcite`, `\textcite`, `\textcite*`, `\Textcite`, `\Textcite*`, `\smartcite`, `\smartcite*`, `\Smartcite`, `\Smartcite*`, `\autocite`, `\autocite*`, `\Autocite`, `\Autocite*`, `\supercite`, `\Supercite`, `\fullcite`, `\nocite`, `\citeauthor`, `\citeauthor*`, `\Citeauthor`, `\Citeauthor*`, `\citetitle`, `\citetitle*`, `\Citetitle`, `\Citetitle*`, `\citeyear`, `\citeyear*`, `\citeurl`, `\citeurldate`, `\citedate`, `\citedate*`, `\Citedate`, `\Citedate*`, `\volcite`, `\pvolcite`, `\fvolcite`, `\svolcite`.
 - **BibLaTeX multi-entry**: `\cites`, `\Cites`, `\parencites`, `\Parencites`, `\footcites`, `\Footcites`, `\textcites`, `\Textcites`, `\smartcites`, `\Smartcites`, `\autocites`, `\Autocites`, `\supercites`, `\Supercites`, `\nocites`, `\fullcites`, `\footfullcites`, `\volcites`, `\pvolcites`, `\fvolcites`, `\svolcites`.
 
-### Citation formats
+## 🎨 Citation Formats
 
 `<C-s>` and `<C-r>` insert ready-made textual reference templates. `<C-y>` opens a picker listing every enabled format with descriptive labels and per-entry samples.
 Press `<CR>` to apply the highlighted format—just like the command picker, the confirm action inserts into the originating buffer rather than attempting to jump to a source file. Both `<C-c>` and `<C-y>` reuse the same insertion helper as the main `<CR>` action so these pickers always write back into the buffer where you launched them.
@@ -341,7 +391,7 @@ require("snacks-bibtex").setup({
 })
 ```
 
-#### Template placeholders
+### Template placeholders
 
 Each entry exposes derived metadata for templates in addition to the raw BibTeX fields:
 
@@ -374,6 +424,13 @@ require("snacks-bibtex").bibtex({
 })
 ```
 
-## License
+## 📄 License
 
 [MIT](./LICENSE)
+
+## 🙏 Acknowledgments
+
+- [folke/snacks.nvim](https://github.com/folke/snacks.nvim) – The excellent picker framework that powers this plugin
+- [lervag/vimtex](https://github.com/lervag/vimtex) – Comprehensive LaTeX support for Vim/Neovim
+- [nvim-telescope/telescope-bibtex.nvim](https://github.com/nvim-telescope/telescope-bibtex.nvim) – Inspiration for BibTeX integration patterns
+- The BibTeX and LaTeX communities for maintaining robust citation standards
