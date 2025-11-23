@@ -44,7 +44,7 @@ local defaults ---@type SnacksBibtexConfig
 ---@field depth integer|nil Directory recursion depth for local bib search
 ---@field files string[]|nil Explicit list of project-local bib files
 ---@field global_files string[]|nil List of global bib files (outside project)
----@field context boolean|nil Enable context-aware bibliography file detection from current buffer (default: true)
+---@field context boolean|nil Enable context-aware bibliography file detection from current buffer (default: false)
 ---@field context_fallback boolean|nil When context=true and no context found: true=fall back to project search, false=show no entries (default: true)
 ---@field search_fields string[] Ordered list of fields to search (e.g. {"author","title","year","keywords"})
 ---@field format string Default format for inserting citation keys or labels
@@ -335,7 +335,7 @@ local function init_defaults()
     depth = 1,
     files = nil,
     global_files = {},
-    context = true,
+    context = false,
     context_fallback = true,
     search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
     match_priority = { "author", "year", "title" },
