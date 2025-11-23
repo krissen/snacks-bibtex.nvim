@@ -132,8 +132,8 @@ require("snacks-bibtex").setup({
   depth = 1,                        -- recursion depth for project search (nil for unlimited)
   files = nil,                      -- explicit list of project-local bib files (supports ~ / $ENV expansion)
   global_files = {},                -- list of additional bib files (supports ~ / $ENV expansion)
-  context = false,                  -- enable context-aware bibliography file detection
-  context_fallback = true,          -- fall back to non-contextual behavior if no context found (only when context=true)
+  context = true,                   -- enable context-aware bibliography file detection (recommended)
+  context_fallback = true,          -- when context=true and no context found: true=fall back to project search, false=show no entries
   search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
   match_priority = { "author", "year", "title" }, -- remaining search_fields are appended automatically
   format = "%s",                    -- how keys are inserted with <CR>
@@ -254,7 +254,18 @@ display = {
 
 ### Context-aware bibliography file detection
 
-When `context = true`, snacks-bibtex looks for context lines in your currently opened file that specify which bibliography file(s) to use. This feature ignores both `global_files` and the normal project directory search, using only the files detected from context.
+When `context = true` (the default), snacks-bibtex looks for context lines in your currently opened file that specify which bibliography file(s) to use. This is particularly useful for multi-project workflows where different documents reference different bibliography files.
+
+**How it works:**
+- When context is detected (e.g., `bibliography:` in YAML frontmatter or `\addbibresource{}` in LaTeX), **only** those files are used
+- Both `global_files` and the normal project directory search are ignored when context is found
+- If no context is detected and `context_fallback = true` (the default), the plugin falls back to searching your project directory
+- If no context is detected and `context_fallback = false`, no entries will be shown
+
+**When to use `context_fallback = false`:**
+- You want strict mode: only show citations when the document explicitly declares its bibliography
+- You're working in a repository with multiple unrelated documents and want to avoid accidentally citing from the wrong bibliography
+- You want to enforce that all documents must declare their bibliography sources
 
 **Supported filetypes and context patterns:**
 
@@ -288,8 +299,19 @@ Citations go here \cite{key}.
 **Configuration example:**
 ```lua
 require("snacks-bibtex").setup({
-  context = true,           -- Enable context awareness
-  context_fallback = true,  -- Use normal search if no context found
+  context = true,           -- Enable context awareness (default)
+  context_fallback = true,  -- Fall back to project search if no context found (default)
+})
+
+-- For strict mode (only show citations when document declares bibliography):
+require("snacks-bibtex").setup({
+  context = true,
+  context_fallback = false,  -- No fallback: require explicit bibliography declaration
+})
+
+-- To disable context awareness entirely (always search project):
+require("snacks-bibtex").setup({
+  context = false,  -- Always use project directory search
 })
 ```
 
@@ -300,9 +322,20 @@ require("snacks-bibtex").bibtex({ context = true })
 
 -- Disable context for this call
 require("snacks-bibtex").bibtex({ context = false })
+
+-- Strict mode for this call (no fallback)
+require("snacks-bibtex").bibtex({ context = true, context_fallback = false })
 ```
 
-When `context_fallback = true` (the default), the plugin falls back to searching the project directory if no context is found. Set `context_fallback = false` to only use context-detected files and return no entries when context is missing.
+**Summary of behavior:**
+
+| `context` | `context_fallback` | Context found? | Result |
+|-----------|-------------------|----------------|--------|
+| `true` | `true` | Yes | Use context files only |
+| `true` | `true` | No | Fall back to project search + `global_files` |
+| `true` | `false` | Yes | Use context files only |
+| `true` | `false` | No | Show no entries |
+| `false` | any | any | Always use project search + `global_files` (context is ignored) |
 
 ### Sorting and frecency
 
