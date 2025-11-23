@@ -1626,13 +1626,40 @@ local function make_item(entry, cfg, now)
     search_text = entry.key or ""
   end
 
-  local preview = format_template(cfg.preview_format, entry)
-  if preview == "" then
-    preview = entry.key
+  local preview
+  local display = cfg.display
+
+  -- Build preview from preview_fields if specified, otherwise use preview_format
+  if display.preview_fields and #display.preview_fields > 0 then
+    local parts = {}
+    for _, field_name in ipairs(display.preview_fields) do
+      local value = field_value(entry, field_name)
+      if value and value ~= "" then
+        parts[#parts + 1] = value
+      end
+    end
+    preview = #parts > 0 and table.concat(parts, display.preview_fields_separator) or entry.key
+  else
+    preview = format_template(cfg.preview_format, entry)
+    if preview == "" then
+      preview = entry.key
+    end
   end
-  local label = preview
-  if preview ~= entry.key then
-    label = ("%s — %s"):format(entry.key, preview)
+
+  local label
+  if display.show_key and display.show_preview then
+    if preview ~= entry.key then
+      label = ("%s%s%s"):format(entry.key, display.key_separator, preview)
+    else
+      label = entry.key
+    end
+  elseif display.show_key then
+    label = entry.key
+  elseif display.show_preview then
+    label = preview
+  else
+    -- If both are false, fallback to showing the key
+    label = entry.key
   end
   local history_record = get_history_entry(entry.key)
   local item = {

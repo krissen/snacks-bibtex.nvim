@@ -150,6 +150,13 @@ require("snacks-bibtex").setup({
     description = true,              -- show human-readable descriptions
     template = false,                -- include the raw template text
   },
+  display = {
+    show_key = true,                -- show citation key in picker list
+    show_preview = true,            -- show formatted preview in picker list
+    key_separator = " — ",          -- separator between key and preview when both shown
+    preview_fields = nil,           -- optional list of field names to show in preview (overrides preview_format)
+    preview_fields_separator = " — ", -- separator between preview fields when preview_fields is used
+  },
   sort = {
     { field = "frecency", direction = "desc" }, -- recently used entries first
     { field = "author", direction = "asc" },    -- then author alphabetical
@@ -173,6 +180,77 @@ require("snacks-bibtex").setup({
 ```
 
 Paths supplied through `files` or `global_files` may include `~` or environment variables (for example `"~/Documents/library.bib"` or `"$ZOTERO_HOME/export.bib"`); snacks-bibtex expands these before attempting to read the files.
+
+### Display configuration
+
+The `display` table controls how entries appear in the picker list:
+
+```lua
+require("snacks-bibtex").setup({
+  display = {
+    show_key = true,                -- show citation key in picker list
+    show_preview = true,            -- show formatted preview in picker list
+    key_separator = " — ",          -- separator between key and preview when both shown
+    preview_fields = nil,           -- optional list of field names to show in preview
+    preview_fields_separator = " — ", -- separator between preview fields
+  },
+})
+```
+
+By default, both the citation key and the formatted preview are shown (`smith2020 — Smith, J. (2020) — Article Title`). If you have long citation keys that take up too much space, you can hide them by setting `show_key = false` to display only the formatted preview information. Conversely, setting `show_preview = false` shows only the citation keys. The `key_separator` can be customized to any string you prefer when both are visible.
+
+When both `show_key` and `show_preview` are enabled but the preview is identical to the key (which happens when the entry has minimal metadata), only the key is shown to avoid duplication.
+
+#### Customizing preview fields
+
+You can customize which fields appear in the preview by specifying `preview_fields`. This provides a simpler alternative to writing a full `preview_format` template:
+
+```lua
+require("snacks-bibtex").setup({
+  display = {
+    preview_fields = { "author", "year", "title" },
+    preview_fields_separator = " • ",  -- customize the separator between fields
+  },
+})
+```
+
+When `preview_fields` is set, it overrides the `preview_format` setting. The fields are joined with the `preview_fields_separator` (default: `" — "`).
+
+**Available field names:**
+
+You can use any of the following in `preview_fields` (field names are case-insensitive):
+
+- **BibTeX fields**: `author`, `editor`, `title`, `journal`, `journaltitle`, `booktitle`, `publisher`, `year`, `volume`, `number`, `issue`, `pages`, `doi`, `url`, `organization`, `institution`, `location`, `address`, `edition`, `series`, and any other standard BibTeX field
+- **Derived fields**: `authors.in_text`, `authors.reference`, `authors.families`, `authors.count`, `editors.collection`, `apa.in_text`, `apa.reference`
+- **Special fields**: `key`, `type`, `file`
+
+See the [Template placeholders](#template-placeholders) section for more details on derived fields.
+
+> **Note:** Using raw BibTeX field names (e.g., `"author"`, `"title"`) in `preview_fields` will return the unformatted BibTeX value (e.g., `"Smith, John and Doe, Jane"`).  
+> For formatted output (e.g., `"Smith, J. & Doe, J."`), use derived fields like `"authors.reference"` or `"apa.in_text"`.
+
+Examples:
+
+```lua
+-- Show only author and year (using BibTeX field names)
+display = {
+  preview_fields = { "author", "year" },
+}
+-- Result: "Smith, John and Doe, Jane — 2020"  (raw BibTeX value; not formatted)
+
+-- Show author, title, and journal with custom separator
+display = {
+  preview_fields = { "author", "title", "journal" },
+  preview_fields_separator = " | ",
+}
+-- Result: "Smith, John and Doe, Jane | Machine Learning Applications | Journal of Computing"
+
+-- Use derived fields for formatted output
+display = {
+  preview_fields = { "authors.reference", "year", "title" },
+}
+-- Result: "Smith, J. & Doe, J. — 2020 — Machine Learning Applications"
+```
 
 ### Context-aware bibliography file detection
 
