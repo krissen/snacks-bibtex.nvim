@@ -215,7 +215,7 @@ local function detect_context_files()
 
     -- Resolve relative paths
     -- Check if path is already absolute (Unix: starts with /, Windows: has drive letter)
-    local is_absolute = file_path:match("^/") or file_path:match("^%a:")
+    local is_absolute = file_path:match("^/") or file_path:match("^%a:[/\\]")
     if not is_absolute then
       file_path = vim.fs.joinpath(current_dir, file_path)
     end
@@ -266,8 +266,8 @@ local function detect_context_files()
           local array_item = line:match("^%s*%-%s*(.+)$")
           if array_item then
             array_item = vim.trim(array_item)
-            -- Only consider it if it looks like a file path
-            if array_item:match("%.bib") then
+            -- Only consider it if it looks like a file path ending with .bib
+            if array_item:match("%.bib$") then
               array_item = array_item:gsub("^['\"]", ""):gsub("['\"]$", "")
               add_file(array_item)
             end
