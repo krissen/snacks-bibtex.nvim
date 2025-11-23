@@ -7,6 +7,7 @@ Scan local and global `*.bib` files, preview entries, and insert citation keys o
 ## ✨ Features
 
 - 📖 **Flexible BibTeX integration** – Finds entries from project-local and global libraries
+- 🎯 **Context awareness** – Auto-detect bibliography files from YAML frontmatter or LaTeX preambles
 - 🔍 **Smart search** – Configurable fields (author, title, year, …) with LaTeX accent awareness
 - 📝 **Multiple insertion modes** – Citation keys, formatted references, full entries, or individual fields
 - 🎯 **Rich previews** – See BibTeX source and formatted output before inserting
@@ -27,6 +28,7 @@ While [vimtex](https://github.com/lervag/vimtex) combined with completion plugin
 - **Universal access** – Quick reference lookup regardless of the current document type
 - **Frecency-based ordering** – Automatically prioritize your most-used references
 - **Format flexibility** – Generate APA/Harvard/Oxford citations outside of LaTeX compilation
+- **Context awareness** – Automatically detect bibliography files from your document's frontmatter or preamble
 
 This plugin complements existing tools by providing a universal, on-demand interface to your BibTeX libraries.
 
