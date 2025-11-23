@@ -339,12 +339,13 @@ local function detect_context_files()
     local imported_files = {} ---@type table<string, boolean>
     
     ---Remove block comments from content while preserving line count
+    ---Note: Typst block comments do not nest (like C/C++), so the non-greedy pattern is correct
     ---@param text string
     ---@return string
     local function remove_block_comments(text)
       return text:gsub("/%*.-%*/", function(s)
         -- Preserve line count for accurate line tracking
-        local newline_count = select(2, s:gsub("\n", "\n"))
+        local _, newline_count = s:gsub("\n", "")
         return string.rep("\n", newline_count)
       end)
     end
