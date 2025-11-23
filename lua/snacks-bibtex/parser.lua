@@ -402,15 +402,15 @@ local function detect_context_files()
       local i = 1
       local len = #text
       while i <= len do
-        if i < len and text:sub(i, i+1) == "/*" then
+        if i + 1 <= len and text:sub(i, i+1) == "/*" then
           local depth = 1
           local start_i = i
           i = i + 2
           while i <= len and depth > 0 do
-            if i < len and text:sub(i, i+1) == "/*" then
+            if i + 1 <= len and text:sub(i, i+1) == "/*" then
               depth = depth + 1
               i = i + 2
-            elseif i < len and text:sub(i, i+1) == "*/" then
+            elseif i + 1 <= len and text:sub(i, i+1) == "*/" then
               depth = depth - 1
               i = i + 2
             else
@@ -509,8 +509,11 @@ local function detect_context_files()
         end
         
         -- Match direct #bibliography("file.bib") or #bibliography("file.yml") calls
+        -- Also match #let assignments like: #let my-refs = bibliography("file.bib")
         local bib_file = line:match('#bibliography%s*%(%s*"([^"]+)"%s*%)')
           or line:match("#bibliography%s*%(%s*'([^']+)'%s*%)")
+          or line:match('#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*"([^"]+)"%s*%)')
+          or line:match("#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*'([^']+)'%s*%)")
         if bib_file then
           bib_file = vim.trim(bib_file)
           add_file(bib_file)
