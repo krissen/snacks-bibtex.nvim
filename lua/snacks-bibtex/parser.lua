@@ -452,10 +452,52 @@ local function detect_context_files()
     ---@param text string
     ---@return string
     local function strip_typst_inline_comment(text)
-      -- Find // and remove everything after it
-      local comment_pos = text:find("//")
-      if comment_pos then
-        return text:sub(1, comment_pos - 1)
+      -- Remove // comments, but ignore // inside string literals
+      local in_single = false
+      local in_double = false
+      local i = 1
+      local len = #text
+      while i <= len do
+        local c = text:sub(i, i)
+        if not in_single and not in_double then
+          if c == '"' then
+            in_double = true
+          elseif c == "'" then
+            in_single = true
+          elseif c == "/" and i < len and text:sub(i, i+1) == "//" then
+            -- Found // outside of string, return up to here
+            return text:sub(1, i - 1)
+          end
+        else
+          if in_double then
+            if c == '"' then
+              -- Check for escaped quote
+              local j = i - 1
+              local backslash_count = 0
+              while j >= 1 and text:sub(j, j) == "\\" do
+                backslash_count = backslash_count + 1
+                j = j - 1
+              end
+              if backslash_count % 2 == 0 then
+                in_double = false
+              end
+            end
+          elseif in_single then
+            if c == "'" then
+              -- Check for escaped quote
+              local j = i - 1
+              local backslash_count = 0
+              while j >= 1 and text:sub(j, j) == "\\" do
+                backslash_count = backslash_count + 1
+                j = j - 1
+              end
+              if backslash_count % 2 == 0 then
+                in_single = false
+              end
+            end
+          end
+        end
+        i = i + 1
       end
       return text
     end
