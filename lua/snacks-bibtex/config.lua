@@ -33,10 +33,19 @@ local defaults ---@type SnacksBibtexConfig
 ---@field default integer
 ---@field raw string[]
 
+---@class SnacksBibtexDisplayConfig
+---@field show_key boolean Whether to show the citation key in the picker list
+---@field show_preview boolean Whether to show the formatted preview in the picker list
+---@field key_separator string Separator between key and preview when both are shown
+---@field preview_fields string[]|nil Optional list of field names to show in preview (overrides preview_format)
+---@field preview_fields_separator string Separator between preview fields when preview_fields is used
+
 ---@class SnacksBibtexConfig
 ---@field depth integer|nil Directory recursion depth for local bib search
 ---@field files string[]|nil Explicit list of project-local bib files
 ---@field global_files string[]|nil List of global bib files (outside project)
+---@field context boolean|nil Enable context-aware bibliography file detection from current buffer (default: false)
+---@field context_fallback boolean|nil When context=true and no context found: true=fall back to project search, false=show no entries (default: true)
 ---@field search_fields string[] Ordered list of fields to search (e.g. {"author","title","year","keywords"})
 ---@field format string Default format for inserting citation keys or labels
 ---@field preview_format string Template used to format the preview line(s)
@@ -45,6 +54,7 @@ local defaults ---@type SnacksBibtexConfig
 ---@field citation_format_defaults? { in_text?: string, reference?: string } Default citation format identifiers per usage
 ---@field match_priority string[]|nil Ordered list of fields prioritised when ranking matches
 ---@field citation_command_picker? { title?: string, command?: boolean, description?: boolean, packages?: boolean, template?: boolean } Citation command picker presentation settings
+---@field display? SnacksBibtexDisplayConfig Display settings for picker entries
 ---@field mappings table<string, SnacksBibtexMapping>|nil Custom action mappings for the picker
 ---@field citation_commands SnacksBibtexCitationCommand[] Available citation templates
 ---@field citation_formats SnacksBibtexCitationFormat[] Available citation format templates
@@ -272,6 +282,45 @@ local function normalize_match_priority(priority, search_fields)
   }
 end
 
+---@param value any
+---@param default string
+---@return string
+local function normalize_separator(value, default)
+  return type(value) == "string" and value or default
+end
+
+---@param display SnacksBibtexDisplayConfig|nil
+---@return SnacksBibtexDisplayConfig
+local function normalize_display(display)
+  if not display then
+    return {
+      show_key = true,
+      show_preview = true,
+      key_separator = " — ",
+      preview_fields = nil,
+      preview_fields_separator = " — ",
+    }
+  end
+  local normalized = {
+    show_key = display.show_key == nil and true or display.show_key,
+    show_preview = display.show_preview == nil and true or display.show_preview,
+    key_separator = normalize_separator(display.key_separator, " — "),
+    preview_fields = (type(display.preview_fields) == "table") and display.preview_fields or nil,
+    preview_fields_separator = normalize_separator(display.preview_fields_separator, " — "),
+  }
+  if normalized.preview_fields ~= nil then
+    -- Filter out empty strings but preserve case for field names
+    local fields = {}
+    for _, field in ipairs(normalized.preview_fields) do
+      if type(field) == "string" and field ~= "" then
+        fields[#fields + 1] = field
+      end
+    end
+    normalized.preview_fields = #fields > 0 and fields or nil
+  end
+  return normalized
+end
+
 ---@param cfg SnacksBibtexConfig
 local function apply_match_priority(cfg)
   cfg.search_fields = normalize_field_list(cfg.search_fields) or cfg.search_fields
@@ -285,6 +334,8 @@ local function init_defaults()
     depth = 1,
     files = nil,
     global_files = {},
+    context = false,
+    context_fallback = true,
     search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
     match_priority = { "author", "year", "title" },
     format = "%s",
@@ -301,6 +352,13 @@ local function init_defaults()
       description = true,
       packages = true,
       template = false,
+    },
+    display = {
+      show_key = true,
+      show_preview = true,
+      key_separator = " — ",
+      preview_fields = nil,
+      preview_fields_separator = " — ",
     },
     sort = {
       { field = "frecency", direction = "desc" },
@@ -902,6 +960,21 @@ local function init_defaults()
         packages = "biblatex",
         enabled = false,
       },
+      -- Typst
+      {
+        command = "@key",
+        template = "@{{key}}",
+        description = "Basic citation (Typst)",
+        packages = "typst",
+        enabled = true,
+      },
+      {
+        command = "@key[supplement]",
+        template = "@{{key}}[]",
+        description = "Citation with supplement (Typst)",
+        packages = "typst",
+        enabled = true,
+      },
     },
     citation_formats = {
       {
@@ -971,6 +1044,7 @@ function M.setup(opts)
   local merged = vim.tbl_deep_extend("force", deepcopy(defaults), opts)
   merged.files = normalize_files(merged.files)
   merged.global_files = normalize_files(merged.global_files) or {}
+  merged.display = normalize_display(merged.display)
   normalize_citation_commands(merged.citation_commands)
   normalize_citation_formats(merged.citation_formats)
   merged.sort = normalize_sort(merged.sort)
@@ -995,6 +1069,7 @@ function M.resolve(opts)
   merged.files = normalize_files(merged.files) or merged.files
   merged.global_files = normalize_files(merged.global_files) or merged.global_files
   merged.global_files = merged.global_files or {}
+  merged.display = normalize_display(merged.display)
   normalize_citation_commands(merged.citation_commands)
   normalize_citation_formats(merged.citation_formats)
   merged.sort = normalize_sort(merged.sort)

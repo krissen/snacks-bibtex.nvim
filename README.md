@@ -7,26 +7,28 @@ Scan local and global `*.bib` files, preview entries, and insert citation keys o
 ## ✨ Features
 
 - 📖 **Flexible BibTeX integration** – Finds entries from project-local and global libraries
+- 🎯 **Context awareness** – Auto-detect bibliography files from YAML frontmatter, LaTeX preambles, or Typst documents
 - 🔍 **Smart search** – Configurable fields (author, title, year, …) with LaTeX accent awareness
 - 📝 **Multiple insertion modes** – Citation keys, formatted references, full entries, or individual fields
 - 🎯 **Rich previews** – See BibTeX source and formatted output before inserting
-- ⚡ **Quick shortcuts** – Pre-configured for `\cite`, `\citep`, `\citet`, and common citation formats
+- ⚡ **Quick shortcuts** – Pre-configured for `\cite`, `\citep`, `\citet`, `@key`, and common citation formats
 - 🎨 **Citation styles** – APA 7, Harvard, Oxford templates with live preview
 - 🔧 **Highly customizable** – Mappings, sorting, format templates via Lua
 - 📊 **Frecency sorting** – Frequently and recently used entries float to the top
-- 🎭 **Command picker** – Browse and preview the full BibTeX/natbib/BibLaTeX catalog
+- 🎭 **Command picker** – Browse and preview the full BibTeX/natbib/BibLaTeX/Typst catalog
 - 🧭 **Jump to source** – Navigate directly to BibTeX entries for editing
 
 ## 🤔 Why this plugin?
 
 While [vimtex](https://github.com/lervag/vimtex) combined with completion plugins like [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) provides excellent LaTeX citation support, there are scenarios where a dedicated BibTeX picker is valuable:
 
-- **Beyond LaTeX** – Writing Markdown, Org-mode, or other formats that use BibTeX but aren't LaTeX documents
+- **Beyond LaTeX** – Writing Markdown, Org-mode, Typst, or other formats that use BibTeX but aren't LaTeX documents
 - **Custom workflows** – Manual invocation for citation insertion in any context
 - **Unsupported commands** – Custom `\cite*` variants that completion engines don't recognize
 - **Universal access** – Quick reference lookup regardless of the current document type
 - **Frecency-based ordering** – Automatically prioritize your most-used references
 - **Format flexibility** – Generate APA/Harvard/Oxford citations outside of LaTeX compilation
+- **Context awareness** – Automatically detect bibliography files from your document's frontmatter or preamble
 
 This plugin complements existing tools by providing a universal, on-demand interface to your BibTeX libraries.
 
@@ -130,6 +132,8 @@ require("snacks-bibtex").setup({
   depth = 1,                        -- recursion depth for project search (nil for unlimited)
   files = nil,                      -- explicit list of project-local bib files (supports ~ / $ENV expansion)
   global_files = {},                -- list of additional bib files (supports ~ / $ENV expansion)
+  context = false,                  -- enable context-aware bibliography file detection
+  context_fallback = true,          -- when context=true and no context found: true=fall back to project search, false=show no entries
   search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
   match_priority = { "author", "year", "title" }, -- remaining search_fields are appended automatically
   format = "%s",                    -- how keys are inserted with <CR>
@@ -145,6 +149,13 @@ require("snacks-bibtex").setup({
     packages = true,                 -- show the required packages column
     description = true,              -- show human-readable descriptions
     template = false,                -- include the raw template text
+  },
+  display = {
+    show_key = true,                -- show citation key in picker list
+    show_preview = true,            -- show formatted preview in picker list
+    key_separator = " — ",          -- separator between key and preview when both shown
+    preview_fields = nil,           -- optional list of field names to show in preview (overrides preview_format)
+    preview_fields_separator = " — ", -- separator between preview fields when preview_fields is used
   },
   sort = {
     { field = "frecency", direction = "desc" }, -- recently used entries first
@@ -169,6 +180,188 @@ require("snacks-bibtex").setup({
 ```
 
 Paths supplied through `files` or `global_files` may include `~` or environment variables (for example `"~/Documents/library.bib"` or `"$ZOTERO_HOME/export.bib"`); snacks-bibtex expands these before attempting to read the files.
+
+### Display configuration
+
+The `display` table controls how entries appear in the picker list:
+
+```lua
+require("snacks-bibtex").setup({
+  display = {
+    show_key = true,                -- show citation key in picker list
+    show_preview = true,            -- show formatted preview in picker list
+    key_separator = " — ",          -- separator between key and preview when both shown
+    preview_fields = nil,           -- optional list of field names to show in preview
+    preview_fields_separator = " — ", -- separator between preview fields
+  },
+})
+```
+
+By default, both the citation key and the formatted preview are shown (`smith2020 — Smith, J. (2020) — Article Title`). If you have long citation keys that take up too much space, you can hide them by setting `show_key = false` to display only the formatted preview information. Conversely, setting `show_preview = false` shows only the citation keys. The `key_separator` can be customized to any string you prefer when both are visible.
+
+When both `show_key` and `show_preview` are enabled but the preview is identical to the key (which happens when the entry has minimal metadata), only the key is shown to avoid duplication.
+
+#### Customizing preview fields
+
+You can customize which fields appear in the preview by specifying `preview_fields`. This provides a simpler alternative to writing a full `preview_format` template:
+
+```lua
+require("snacks-bibtex").setup({
+  display = {
+    preview_fields = { "author", "year", "title" },
+    preview_fields_separator = " • ",  -- customize the separator between fields
+  },
+})
+```
+
+When `preview_fields` is set, it overrides the `preview_format` setting. The fields are joined with the `preview_fields_separator` (default: `" — "`).
+
+**Available field names:**
+
+You can use any of the following in `preview_fields` (field names are case-insensitive):
+
+- **BibTeX fields**: `author`, `editor`, `title`, `journal`, `journaltitle`, `booktitle`, `publisher`, `year`, `volume`, `number`, `issue`, `pages`, `doi`, `url`, `organization`, `institution`, `location`, `address`, `edition`, `series`, and any other standard BibTeX field
+- **Derived fields**: `authors.in_text`, `authors.reference`, `authors.families`, `authors.count`, `editors.collection`, `apa.in_text`, `apa.reference`
+- **Special fields**: `key`, `type`, `file`
+
+See the [Template placeholders](#template-placeholders) section for more details on derived fields.
+
+> **Note:** Using raw BibTeX field names (e.g., `"author"`, `"title"`) in `preview_fields` will return the unformatted BibTeX value (e.g., `"Smith, John and Doe, Jane"`).  
+> For formatted output (e.g., `"Smith, J. & Doe, J."`), use derived fields like `"authors.reference"` or `"apa.in_text"`.
+
+Examples:
+
+```lua
+-- Show only author and year (using BibTeX field names)
+display = {
+  preview_fields = { "author", "year" },
+}
+-- Result: "Smith, John and Doe, Jane — 2020"  (raw BibTeX value; not formatted)
+
+-- Show author, title, and journal with custom separator
+display = {
+  preview_fields = { "author", "title", "journal" },
+  preview_fields_separator = " | ",
+}
+-- Result: "Smith, John and Doe, Jane | Machine Learning Applications | Journal of Computing"
+
+-- Use derived fields for formatted output
+display = {
+  preview_fields = { "authors.reference", "year", "title" },
+}
+-- Result: "Smith, J. & Doe, J. — 2020 — Machine Learning Applications"
+```
+
+### Context-aware bibliography file detection
+
+When `context = true`, snacks-bibtex looks for context lines in your currently opened file that specify which bibliography file(s) to use. This is particularly useful for multi-project workflows where different documents reference different bibliography files. By default, `context = false`, meaning the plugin will always search your project directory for `.bib` files and include `global_files`.
+
+**How it works:**
+- When context is detected (e.g., `bibliography:` in YAML frontmatter or `\addbibresource{}` in LaTeX), **only** those files are used
+- Both `global_files` and the normal project directory search are ignored when context is found
+- If no context is detected and `context_fallback = true` (the default), the plugin falls back to searching your project directory
+- If no context is detected and `context_fallback = false`, no entries will be shown
+
+**When to use `context_fallback = false`:**
+- You want strict mode: only show citations when the document explicitly declares its bibliography
+- You're working in a repository with multiple unrelated documents and want to avoid accidentally citing from the wrong bibliography
+- You want to enforce that all documents must declare their bibliography sources
+
+**Supported filetypes and context patterns:**
+
+| Filetype | Context Pattern | Example |
+|----------|----------------|---------|
+| `pandoc`, `markdown`, `md`, `rmd` | YAML frontmatter `bibliography:` | `bibliography: refs.bib` or array format |
+| `tex`, `plaintex`, `latex` | `\bibliography{file}` | `\bibliography{references}` (extension added automatically) |
+| `tex`, `plaintex`, `latex` | `\addbibresource{file}` | `\addbibresource{references.bib}` |
+| `typst` | `#bibliography("file")` | `#bibliography("references.bib")` or `#bibliography("references.yml")` |
+| `typst` | `#import "file.typ": refs` | Detects bibliography from imported `.typ` files (supports `#let refs = bibliography("file")`) |
+
+**Example Markdown file with context:**
+```markdown
+---
+title: My Paper
+bibliography: references.bib
+---
+
+# Introduction
+Citations go here [@key].
+```
+
+**Example LaTeX file with context:**
+```latex
+\documentclass{article}
+\usepackage{biblatex}
+\addbibresource{references.bib}
+\begin{document}
+Citations go here \cite{key}.
+\end{document}
+```
+
+**Example Typst file with context:**
+```typst
+#bibliography("references.bib")
+
+= Introduction
+Citations go here @key.
+```
+
+**Example Typst file with imported references:**
+```typst
+#import "refs.typ": refs
+
+= Introduction
+Citations: @berger1967 and @hjarpe2019.
+
+== References
+#refs
+```
+
+Where `refs.typ` contains:
+```typst
+#let refs = bibliography("refs.bib")
+```
+
+**Configuration example:**
+```lua
+require("snacks-bibtex").setup({
+  context = true,           -- Enable context awareness (default: false)
+  context_fallback = true,  -- Fall back to project search if no context found (default)
+})
+
+-- For strict mode (only show citations when document declares bibliography):
+require("snacks-bibtex").setup({
+  context = true,
+  context_fallback = false,  -- No fallback: require explicit bibliography declaration
+})
+
+-- Default behavior (always search project):
+require("snacks-bibtex").setup({
+  context = false,  -- Always use project directory search (default)
+})
+```
+
+**Per-invocation context control:**
+```lua
+-- Enable context for this call only
+require("snacks-bibtex").bibtex({ context = true })
+
+-- Disable context for this call
+require("snacks-bibtex").bibtex({ context = false })
+
+-- Strict mode for this call (no fallback)
+require("snacks-bibtex").bibtex({ context = true, context_fallback = false })
+```
+
+**Summary of behavior:**
+
+| `context` | `context_fallback` | Context found? | Result |
+|-----------|-------------------|----------------|--------|
+| `true` | `true` | Yes | Use context files only |
+| `true` | `true` | No | Fall back to project search + `global_files` |
+| `true` | `false` | Yes | Use context files only |
+| `true` | `false` | No | Show no entries |
+| `false` | any | any | Always use project search + `global_files` (context is ignored) |
 
 ### Sorting and frecency
 
@@ -237,6 +430,8 @@ Pressing `<C-c>` opens a dedicated picker with all enabled citation templates. E
 | `\autocite{<key>}` | BibLaTeX | Context-aware cite |
 | `\nocite{<key>}` | BibTeX, BibLaTeX | Bibliography-only |
 | `\fullcite{<key>}` | BibLaTeX | Full citation |
+| `@<key>` | Typst | Basic citation |
+| `@<key>[supplement]` | Typst | Citation with supplement |
 
 All other BibTeX, natbib, and BibLaTeX `\cite*` variants ship with the plugin but are disabled by default to keep the picker concise.
 
@@ -321,12 +516,13 @@ All bundled templates render canonical snippets such as `\cite{key}` without ext
 
 ### Bundled command catalog
 
-The plugin ships ready-to-enable templates for every `\cite`-family command provided by BibTeX, natbib, and BibLaTeX. Commands are grouped below for convenience:
+The plugin ships ready-to-enable templates for every `\cite`-family command provided by BibTeX, natbib, and BibLaTeX, plus Typst citation formats. Commands are grouped below for convenience:
 
 - **BibTeX**: `\cite`, `\cite*`, `\nocite`.
 - **natbib**: `\citet`, `\citet*`, `\Citet`, `\citep`, `\citep*`, `\Citep`, `\citealt`, `\citealt*`, `\Citealt`, `\citealp`, `\citealp*`, `\Citealp`, `\citeauthor`, `\citeauthor*`, `\citeyear`, `\citeyear*`, `\citeyearpar`, `\cites`.
 - **BibLaTeX single-entry**: `\cite`, `\cite*`, `\Cite`, `\Cite*`, `\parencite`, `\parencite*`, `\Parencite`, `\Parencite*`, `\footcite`, `\footcite*`, `\Footcite`, `\Footcite*`, `\footcitetext`, `\footfullcite`, `\textcite`, `\textcite*`, `\Textcite`, `\Textcite*`, `\smartcite`, `\smartcite*`, `\Smartcite`, `\Smartcite*`, `\autocite`, `\autocite*`, `\Autocite`, `\Autocite*`, `\supercite`, `\Supercite`, `\fullcite`, `\nocite`, `\citeauthor`, `\citeauthor*`, `\Citeauthor`, `\Citeauthor*`, `\citetitle`, `\citetitle*`, `\Citetitle`, `\Citetitle*`, `\citeyear`, `\citeyear*`, `\citeurl`, `\citeurldate`, `\citedate`, `\citedate*`, `\Citedate`, `\Citedate*`, `\volcite`, `\pvolcite`, `\fvolcite`, `\svolcite`.
 - **BibLaTeX multi-entry**: `\cites`, `\Cites`, `\parencites`, `\Parencites`, `\footcites`, `\Footcites`, `\textcites`, `\Textcites`, `\smartcites`, `\Smartcites`, `\autocites`, `\Autocites`, `\supercites`, `\Supercites`, `\nocites`, `\fullcites`, `\footfullcites`, `\volcites`, `\pvolcites`, `\fvolcites`, `\svolcites`.
+- **Typst**: `@key`, `@key[supplement]`.
 
 ## 🎨 Citation Formats
 

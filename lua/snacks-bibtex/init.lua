@@ -1131,7 +1131,8 @@ local function build_apa_reference(entry, values)
       end
       segments[#segments + 1] = sentence
     end
-    local publisher_segment = build_publisher_segment(latex_trim(fields.location or fields.address or ""), latex_trim(fields.publisher))
+    local publisher_segment =
+      build_publisher_segment(latex_trim(fields.location or fields.address or ""), latex_trim(fields.publisher))
     if publisher_segment ~= "" then
       if not publisher_segment:match("[%.!?]$") then
         publisher_segment = publisher_segment .. "."
@@ -1139,7 +1140,8 @@ local function build_apa_reference(entry, values)
       segments[#segments + 1] = publisher_segment
     end
   else
-    local publisher_segment = build_publisher_segment(latex_trim(fields.location or fields.address or ""), latex_trim(fields.publisher))
+    local publisher_segment =
+      build_publisher_segment(latex_trim(fields.location or fields.address or ""), latex_trim(fields.publisher))
     if publisher_segment ~= "" then
       if not publisher_segment:match("[%.!?]$") then
         publisher_segment = publisher_segment .. "."
@@ -1256,7 +1258,7 @@ local function find_citation_command(cfg, spec, opts)
   local desired_id = spec.id and sanitize_identifier(spec.id) or nil
   for _, command in ipairs(cfg.citation_commands or {}) do
     if type(command) == "table" and command.command and command.template then
-      if (not enabled_only or command.enabled ~= false) then
+      if not enabled_only or command.enabled ~= false then
         local command_id = sanitize_identifier(command.id or command.command)
         local matches = false
         if spec.command and command.command == spec.command then
@@ -1288,7 +1290,7 @@ local function find_citation_format(cfg, spec, opts)
   local desired_id = spec.id and sanitize_identifier(spec.id) or nil
   for _, format in ipairs(cfg.citation_formats or {}) do
     if type(format) == "table" and format.template then
-      if (not enabled_only or format.enabled ~= false) then
+      if not enabled_only or format.enabled ~= false then
         local format_id = sanitize_identifier(format.id or format.name or format.template)
         local matches = false
         if desired_id and format_id == desired_id then
@@ -1624,13 +1626,40 @@ local function make_item(entry, cfg, now)
     search_text = entry.key or ""
   end
 
-  local preview = format_template(cfg.preview_format, entry)
-  if preview == "" then
-    preview = entry.key
+  local preview
+  local display = cfg.display
+
+  -- Build preview from preview_fields if specified, otherwise use preview_format
+  if display.preview_fields and #display.preview_fields > 0 then
+    local parts = {}
+    for _, field_name in ipairs(display.preview_fields) do
+      local value = field_value(entry, field_name)
+      if value and value ~= "" then
+        parts[#parts + 1] = value
+      end
+    end
+    preview = #parts > 0 and table.concat(parts, display.preview_fields_separator) or entry.key
+  else
+    preview = format_template(cfg.preview_format, entry)
+    if preview == "" then
+      preview = entry.key
+    end
   end
-  local label = preview
-  if preview ~= entry.key then
-    label = ("%s — %s"):format(entry.key, preview)
+
+  local label
+  if display.show_key and display.show_preview then
+    if preview ~= entry.key then
+      label = ("%s%s%s"):format(entry.key, display.key_separator, preview)
+    else
+      label = entry.key
+    end
+  elseif display.show_key then
+    label = entry.key
+  elseif display.show_preview then
+    label = preview
+  else
+    -- If both are false, fallback to showing the key
+    label = entry.key
   end
   local history_record = get_history_entry(entry.key)
   local item = {
@@ -2146,7 +2175,11 @@ local function build_keymaps(actions, mappings, cfg)
       register_key_spec(input_keys, key, name, key_opts)
     elseif type(action) == "table" then
       if action.kind == "citation_command" then
-        local command = find_citation_command(cfg, { id = action.id, command = action.command }, { enabled_only = true })
+        local command = find_citation_command(
+          cfg,
+          { id = action.id, command = action.command },
+          { enabled_only = true }
+        )
         if command then
           local ident = sanitize_identifier(command.id or command.command)
           if ident == "" then
