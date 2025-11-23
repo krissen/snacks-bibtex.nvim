@@ -214,7 +214,8 @@ local function detect_context_files()
     end
 
     -- Expand user paths and environment variables
-    if file_path:match("^~") or file_path:match("%$%w+") then
+    -- Support both $VAR and ${VAR} formats, with underscores in variable names
+    if file_path:match("^~") or file_path:match("%$[%w_]+") or file_path:match("%${[%w_]+}") then
       local ok, expanded = pcall(vim.fn.expand, file_path)
       if ok and type(expanded) == "string" and expanded ~= "" then
         file_path = expanded
@@ -243,6 +244,19 @@ local function detect_context_files()
     -- Can be single or multiple files
     local in_bibliography_array = false
     local yaml_depth = 0
+    
+    ---Remove YAML inline comments (text after # outside of quotes)
+    ---@param text string
+    ---@return string
+    local function strip_yaml_comment(text)
+      -- Simple approach: find # and remove everything after it
+      -- This doesn't handle quoted strings, but for file paths this is usually fine
+      local comment_pos = text:find("#")
+      if comment_pos then
+        return text:sub(1, comment_pos - 1)
+      end
+      return text
+    end
 
     for _, line in ipairs(lines) do
       -- Track YAML frontmatter boundaries
@@ -258,6 +272,8 @@ local function detect_context_files()
         -- Match single file or inline array: bibliography: path/to/file.bib or bibliography: [file1.bib, file2.bib]
         local file_path = line:match("^%s*bibliography:%s*(.+)$")
         if file_path then
+          -- Strip inline comments
+          file_path = strip_yaml_comment(file_path)
           file_path = vim.trim(file_path)
           -- Check if it's the start of a multi-line array (empty value after colon)
           if file_path == "" then
@@ -286,6 +302,8 @@ local function detect_context_files()
           -- Match array item: - path/to/file.bib or - path/to/file.bibtex
           local array_item = line:match("^%s*%-%s*(.+)$")
           if array_item then
+            -- Strip inline comments
+            array_item = strip_yaml_comment(array_item)
             array_item = vim.trim(array_item)
             -- Accept any non-empty string as a bibliography file in array context
             if array_item ~= "" then
@@ -304,9 +322,39 @@ local function detect_context_files()
     end
   elseif filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
     -- LaTeX: \bibliography{file} or \addbibresource{file}
+    
+    ---Remove LaTeX inline comments (text after % that isn't escaped with \%)
+    ---@param text string
+    ---@return string
+    local function strip_latex_comment(text)
+      -- Find unescaped % and remove everything after it
+      local result = {}
+      local i = 1
+      while i <= #text do
+        if text:sub(i, i) == "%" then
+          -- Check if it's escaped
+          if i > 1 and text:sub(i - 1, i - 1) == "\\" then
+            -- Escaped %, keep it
+            result[#result + 1] = "%"
+            i = i + 1
+          else
+            -- Unescaped %, this starts a comment - stop here
+            break
+          end
+        else
+          result[#result + 1] = text:sub(i, i)
+          i = i + 1
+        end
+      end
+      return table.concat(result)
+    end
+    
     for _, line in ipairs(lines) do
-      -- Skip LaTeX comment lines
+      -- Skip LaTeX comment lines (lines starting with %)
       if not line:match("^%s*%%") then
+        -- Strip inline comments
+        line = strip_latex_comment(line)
+        
         -- \bibliography{file} - file without extension
         local bib_file = line:match("\\bibliography%s*{([^}]+)}")
         if bib_file then
@@ -339,27 +387,67 @@ local function detect_context_files()
     local imported_files = {} ---@type table<string, boolean>
     
     ---Remove block comments from content while preserving line count
-    ---Note: Typst block comments do not nest (like C/C++), so the non-greedy pattern is correct
+    ---Note: Typst block comments DO nest (unlike C/C++), so we need a nesting-aware algorithm
     ---@param text string
     ---@return string
     local function remove_block_comments(text)
-      return text:gsub("/%*.-%*/", function(s)
-        -- Preserve line count for accurate line tracking
-        local _, newline_count = s:gsub("\n", "")
-        return string.rep("\n", newline_count)
-      end)
+      local result = {}
+      local i = 1
+      local len = #text
+      while i <= len do
+        if text:sub(i, i+1) == "/*" then
+          local depth = 1
+          local start_i = i
+          i = i + 2
+          while i <= len and depth > 0 do
+            if text:sub(i, i+1) == "/*" then
+              depth = depth + 1
+              i = i + 2
+            elseif text:sub(i, i+1) == "*/" then
+              depth = depth - 1
+              i = i + 2
+            else
+              i = i + 1
+            end
+          end
+          -- Preserve newlines
+          local removed = text:sub(start_i, i - 1)
+          for _ in removed:gmatch("\n") do
+            result[#result + 1] = "\n"
+          end
+        else
+          result[#result + 1] = text:sub(i, i)
+          i = i + 1
+        end
+      end
+      return table.concat(result)
     end
     
     -- Remove block comments from the content before processing
     local content = table.concat(lines, "\n")
     content = remove_block_comments(content)
     
+    ---Remove Typst inline comments (text after //)
+    ---@param text string
+    ---@return string
+    local function strip_typst_inline_comment(text)
+      -- Find // and remove everything after it
+      local comment_pos = text:find("//")
+      if comment_pos then
+        return text:sub(1, comment_pos - 1)
+      end
+      return text
+    end
+    
     -- Split back into lines after removing block comments
     local processed_lines = vim.split(content, '\n', { plain = true })
     
     for _, line in ipairs(processed_lines) do
-      -- Skip Typst single-line comments
+      -- Skip Typst single-line comments (lines starting with //)
       if not line:match("^%s*//") then
+        -- Strip inline comments
+        line = strip_typst_inline_comment(line)
+        
         -- Match #import "refs.typ": refs pattern to find imported files
         local import_file = line:match('#import%s+"([^"]+)"%s*:')
           or line:match("#import%s+'([^']+)'%s*:")
@@ -387,10 +475,13 @@ local function detect_context_files()
               local import_processed_lines = vim.split(import_content, '\n', { plain = true })
               for _, import_line in ipairs(import_processed_lines) do
                 if not import_line:match("^%s*//") then
+                  -- Strip inline comments
+                  import_line = strip_typst_inline_comment(import_line)
+                  
                   local bib_file = import_line:match('#bibliography%s*%(%s*"([^"]+)"%s*%)')
                     or import_line:match("#bibliography%s*%(%s*'([^']+)'%s*%)")
-                    or import_line:match('#let%s+%w+%s*=%s*bibliography%s*%(%s*"([^"]+)"%s*%)')
-                    or import_line:match("#let%s+%w+%s*=%s*bibliography%s*%(%s*'([^']+)'%s*%)")
+                    or import_line:match('#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*"([^"]+)"%s*%)')
+                    or import_line:match("#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*'([^']+)'%s*%)")
                   if bib_file then
                     -- Resolve relative path from imported file's directory
                     local import_dir = vim.fn.fnamemodify(normalized_import, ":h")

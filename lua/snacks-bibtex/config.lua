@@ -286,7 +286,7 @@ end
 ---@param default string
 ---@return string
 local function normalize_separator(value, default)
-  return type(value) == "string" and value ~= "" and value or default
+  return type(value) == "string" and value or default
 end
 
 ---@param display SnacksBibtexDisplayConfig|nil
