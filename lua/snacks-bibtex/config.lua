@@ -37,6 +37,8 @@ local defaults ---@type SnacksBibtexConfig
 ---@field show_key boolean Whether to show the citation key in the picker list
 ---@field show_preview boolean Whether to show the formatted preview in the picker list
 ---@field key_separator string Separator between key and preview when both are shown
+---@field preview_fields string[]|nil Optional list of field names to show in preview (overrides preview_format)
+---@field preview_fields_separator string Separator between preview fields when preview_fields is used
 
 ---@class SnacksBibtexConfig
 ---@field depth integer|nil Directory recursion depth for local bib search
@@ -286,12 +288,16 @@ local function normalize_display(display)
       show_key = true,
       show_preview = true,
       key_separator = " — ",
+      preview_fields = nil,
+      preview_fields_separator = " — ",
     }
   end
   local normalized = {
     show_key = display.show_key,
     show_preview = display.show_preview,
     key_separator = display.key_separator,
+    preview_fields = display.preview_fields,
+    preview_fields_separator = display.preview_fields_separator,
   }
   if normalized.show_key == nil then
     normalized.show_key = true
@@ -301,6 +307,23 @@ local function normalize_display(display)
   end
   if type(normalized.key_separator) ~= "string" or normalized.key_separator == "" then
     normalized.key_separator = " — "
+  end
+  if type(normalized.preview_fields_separator) ~= "string" or normalized.preview_fields_separator == "" then
+    normalized.preview_fields_separator = " — "
+  end
+  if normalized.preview_fields ~= nil then
+    if type(normalized.preview_fields) ~= "table" then
+      normalized.preview_fields = nil
+    else
+      -- Normalize field names to lowercase and filter out empty strings
+      local fields = {}
+      for _, field in ipairs(normalized.preview_fields) do
+        if type(field) == "string" and field ~= "" then
+          fields[#fields + 1] = field:lower()
+        end
+      end
+      normalized.preview_fields = #fields > 0 and fields or nil
+    end
   end
   return normalized
 end
@@ -339,6 +362,8 @@ local function init_defaults()
       show_key = true,
       show_preview = true,
       key_separator = " — ",
+      preview_fields = nil,
+      preview_fields_separator = " — ",
     },
     sort = {
       { field = "frecency", direction = "desc" },

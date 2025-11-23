@@ -150,6 +150,8 @@ require("snacks-bibtex").setup({
     show_key = true,                -- show citation key in picker list
     show_preview = true,            -- show formatted preview in picker list
     key_separator = " — ",          -- separator between key and preview when both shown
+    preview_fields = nil,           -- optional list of field names to show in preview (overrides preview_format)
+    preview_fields_separator = " — ", -- separator between preview fields when preview_fields is used
   },
   sort = {
     { field = "frecency", direction = "desc" }, -- recently used entries first
@@ -185,6 +187,8 @@ require("snacks-bibtex").setup({
     show_key = true,                -- show citation key in picker list
     show_preview = true,            -- show formatted preview in picker list
     key_separator = " — ",          -- separator between key and preview when both shown
+    preview_fields = nil,           -- optional list of field names to show in preview
+    preview_fields_separator = " — ", -- separator between preview fields
   },
 })
 ```
@@ -192,6 +196,38 @@ require("snacks-bibtex").setup({
 By default, both the citation key and the formatted preview are shown (`smith2020 — Smith, J. (2020) — Article Title`). If you have long citation keys that take up too much space, you can hide them by setting `show_key = false` to display only the formatted preview information. Conversely, setting `show_preview = false` shows only the citation keys. The `key_separator` can be customized to any string you prefer when both are visible.
 
 When both `show_key` and `show_preview` are enabled but the preview is identical to the key (which happens when the entry has minimal metadata), only the key is shown to avoid duplication.
+
+#### Customizing preview fields
+
+You can customize which fields appear in the preview by specifying `preview_fields`. This provides a simpler alternative to writing a full `preview_format` template:
+
+```lua
+require("snacks-bibtex").setup({
+  display = {
+    preview_fields = { "authors.reference", "year", "title" },
+    preview_fields_separator = " • ",  -- customize the separator between fields
+  },
+})
+```
+
+When `preview_fields` is set, it overrides the `preview_format` setting. The fields are joined with the `preview_fields_separator` (default: `" — "`). Available field names include all template placeholders (e.g., `authors.reference`, `authors.in_text`, `year`, `title`, `journal`, `booktitle`, etc.). See the [Template placeholders](#template-placeholders) section for a complete list.
+
+Examples:
+
+```lua
+-- Show only author and year
+display = {
+  preview_fields = { "authors.reference", "year" },
+}
+-- Result: "Smith, J. & Doe, J. (2020)"
+
+-- Show author, title, and journal with custom separator
+display = {
+  preview_fields = { "authors.in_text", "title", "journal" },
+  preview_fields_separator = " | ",
+}
+-- Result: "Smith et al. | Machine Learning Applications | Journal of Computing"
+```
 
 ### Sorting and frecency
 
