@@ -302,9 +302,8 @@ local function normalize_display(display)
     }
   end
   local normalized = {
-    show_key = (display.show_key ~= nil and type(display.show_key) == "boolean") and display.show_key or true,
-    show_preview = (display.show_preview ~= nil and type(display.show_preview) == "boolean") and display.show_preview
-      or true,
+    show_key = display.show_key == nil and true or display.show_key,
+    show_preview = display.show_preview == nil and true or display.show_preview,
     key_separator = normalize_separator(display.key_separator, " — "),
     preview_fields = (type(display.preview_fields) == "table") and display.preview_fields or nil,
     preview_fields_separator = normalize_separator(display.preview_fields_separator, " — "),
