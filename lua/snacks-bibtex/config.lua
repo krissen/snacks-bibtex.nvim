@@ -33,6 +33,11 @@ local defaults ---@type SnacksBibtexConfig
 ---@field default integer
 ---@field raw string[]
 
+---@class SnacksBibtexDisplayConfig
+---@field show_key boolean Whether to show the citation key in the picker list
+---@field show_preview boolean Whether to show the formatted preview in the picker list
+---@field key_separator string Separator between key and preview when both are shown
+
 ---@class SnacksBibtexConfig
 ---@field depth integer|nil Directory recursion depth for local bib search
 ---@field files string[]|nil Explicit list of project-local bib files
@@ -45,6 +50,7 @@ local defaults ---@type SnacksBibtexConfig
 ---@field citation_format_defaults? { in_text?: string, reference?: string } Default citation format identifiers per usage
 ---@field match_priority string[]|nil Ordered list of fields prioritised when ranking matches
 ---@field citation_command_picker? { title?: string, command?: boolean, description?: boolean, packages?: boolean, template?: boolean } Citation command picker presentation settings
+---@field display? SnacksBibtexDisplayConfig Display settings for picker entries
 ---@field mappings table<string, SnacksBibtexMapping>|nil Custom action mappings for the picker
 ---@field citation_commands SnacksBibtexCitationCommand[] Available citation templates
 ---@field citation_formats SnacksBibtexCitationFormat[] Available citation format templates
@@ -272,6 +278,33 @@ local function normalize_match_priority(priority, search_fields)
   }
 end
 
+---@param display SnacksBibtexDisplayConfig|nil
+---@return SnacksBibtexDisplayConfig
+local function normalize_display(display)
+  if not display then
+    return {
+      show_key = true,
+      show_preview = true,
+      key_separator = " — ",
+    }
+  end
+  local normalized = {
+    show_key = display.show_key,
+    show_preview = display.show_preview,
+    key_separator = display.key_separator,
+  }
+  if normalized.show_key == nil then
+    normalized.show_key = true
+  end
+  if normalized.show_preview == nil then
+    normalized.show_preview = true
+  end
+  if type(normalized.key_separator) ~= "string" or normalized.key_separator == "" then
+    normalized.key_separator = " — "
+  end
+  return normalized
+end
+
 ---@param cfg SnacksBibtexConfig
 local function apply_match_priority(cfg)
   cfg.search_fields = normalize_field_list(cfg.search_fields) or cfg.search_fields
@@ -301,6 +334,11 @@ local function init_defaults()
       description = true,
       packages = true,
       template = false,
+    },
+    display = {
+      show_key = true,
+      show_preview = true,
+      key_separator = " — ",
     },
     sort = {
       { field = "frecency", direction = "desc" },
@@ -971,6 +1009,7 @@ function M.setup(opts)
   local merged = vim.tbl_deep_extend("force", deepcopy(defaults), opts)
   merged.files = normalize_files(merged.files)
   merged.global_files = normalize_files(merged.global_files) or {}
+  merged.display = normalize_display(merged.display)
   normalize_citation_commands(merged.citation_commands)
   normalize_citation_formats(merged.citation_formats)
   merged.sort = normalize_sort(merged.sort)
@@ -995,6 +1034,7 @@ function M.resolve(opts)
   merged.files = normalize_files(merged.files) or merged.files
   merged.global_files = normalize_files(merged.global_files) or merged.global_files
   merged.global_files = merged.global_files or {}
+  merged.display = normalize_display(merged.display)
   normalize_citation_commands(merged.citation_commands)
   normalize_citation_formats(merged.citation_formats)
   merged.sort = normalize_sort(merged.sort)

@@ -146,6 +146,11 @@ require("snacks-bibtex").setup({
     description = true,              -- show human-readable descriptions
     template = false,                -- include the raw template text
   },
+  display = {
+    show_key = true,                -- show citation key in picker list
+    show_preview = true,            -- show formatted preview in picker list
+    key_separator = " — ",          -- separator between key and preview when both shown
+  },
   sort = {
     { field = "frecency", direction = "desc" }, -- recently used entries first
     { field = "author", direction = "asc" },    -- then author alphabetical
@@ -169,6 +174,24 @@ require("snacks-bibtex").setup({
 ```
 
 Paths supplied through `files` or `global_files` may include `~` or environment variables (for example `"~/Documents/library.bib"` or `"$ZOTERO_HOME/export.bib"`); snacks-bibtex expands these before attempting to read the files.
+
+### Display configuration
+
+The `display` table controls how entries appear in the picker list:
+
+```lua
+require("snacks-bibtex").setup({
+  display = {
+    show_key = true,                -- show citation key in picker list
+    show_preview = true,            -- show formatted preview in picker list
+    key_separator = " — ",          -- separator between key and preview when both shown
+  },
+})
+```
+
+By default, both the citation key and the formatted preview are shown (`smith2020 — Smith, J. (2020) — Article Title`). If you have long citation keys that take up too much space, you can hide them by setting `show_key = false` to display only the formatted preview information. Conversely, setting `show_preview = false` shows only the citation keys. The `key_separator` can be customized to any string you prefer when both are visible.
+
+When both `show_key` and `show_preview` are enabled but the preview is identical to the key (which happens when the entry has minimal metadata), only the key is shown to avoid duplication.
 
 ### Sorting and frecency
 
