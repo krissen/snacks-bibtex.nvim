@@ -186,6 +186,7 @@ When `context = true`, snacks-bibtex looks for context lines in your currently o
 | `tex`, `plaintex`, `latex` | `\bibliography{file}` | `\bibliography{references}` (extension added automatically) |
 | `tex`, `plaintex`, `latex` | `\addbibresource{file}` | `\addbibresource{references.bib}` |
 | `typst` | `#bibliography("file")` | `#bibliography("references.bib")` or `#bibliography("references.yml")` |
+| `typst` | `#import "file.typ": refs` | Detects bibliography from imported `.typ` files (supports `#let refs = bibliography("file")`) |
 
 **Example Markdown file with context:**
 ```markdown
@@ -214,6 +215,22 @@ Citations go here \cite{key}.
 
 = Introduction
 Citations go here @key.
+```
+
+**Example Typst file with imported references:**
+```typst
+#import "refs.typ": refs
+
+= Introduction
+Citations: @berger1967 and @hjarpe2019.
+
+== References
+#refs
+```
+
+Where `refs.typ` contains:
+```typst
+#let refs = bibliography("refs.bib")
 ```
 
 **Configuration example:**

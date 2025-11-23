@@ -329,11 +329,55 @@ local function detect_context_files()
       end
     end
   elseif filetype == "typst" then
-    -- Typst: #bibliography("file.bib") or #bibliography("file.yml")
+    -- Typst: #bibliography("file.bib"), #bibliography("file.yml"), or imported references
+    local imported_files = {} ---@type table<string, boolean>
+    
     for _, line in ipairs(lines) do
       -- Skip Typst comment lines
       if not line:match("^%s*//") then
-        -- Match #bibliography("file.bib") with double or single quotes
+        -- Match #import "refs.typ": refs pattern to find imported files
+        local import_file = line:match('#import%s+"([^"]+)"%s*:')
+          or line:match("#import%s+'([^']+)'%s*:")
+        if import_file and not imported_files[import_file] then
+          imported_files[import_file] = true
+          -- Resolve relative path for imported file
+          local import_path
+          local is_absolute = import_file:match("^/") or import_file:match("^%a:[/\\]")
+          if not is_absolute then
+            import_path = vim.fs.joinpath(current_dir, import_file)
+          else
+            import_path = import_file
+          end
+          local normalized_import = vim.fs.normalize(import_path)
+          
+          -- Read and parse the imported file for bibliography calls
+          local import_stat = uv.fs_stat(normalized_import)
+          if import_stat and import_stat.type == "file" then
+            local import_lines = vim.fn.readfile(normalized_import)
+            for _, import_line in ipairs(import_lines) do
+              if not import_line:match("^%s*//") then
+                local bib_file = import_line:match('#bibliography%s*%(%s*"([^"]+)"%s*%)')
+                  or import_line:match("#bibliography%s*%(%s*'([^']+)'%s*%)")
+                  or import_line:match('#let%s+%w+%s*=%s*bibliography%s*%(%s*"([^"]+)"%s*%)')
+                  or import_line:match("#let%s+%w+%s*=%s*bibliography%s*%(%s*'([^']+)'%s*%)")
+                if bib_file then
+                  -- Resolve relative path from imported file's directory
+                  local import_dir = vim.fn.fnamemodify(normalized_import, ":h")
+                  local bib_path
+                  local is_bib_absolute = bib_file:match("^/") or bib_file:match("^%a:[/\\]")
+                  if not is_bib_absolute then
+                    bib_path = vim.fs.joinpath(import_dir, bib_file)
+                  else
+                    bib_path = bib_file
+                  end
+                  add_file(vim.trim(bib_path))
+                end
+              end
+            end
+          end
+        end
+        
+        -- Match direct #bibliography("file.bib") or #bibliography("file.yml") calls
         local bib_file = line:match('#bibliography%s*%(%s*"([^"]+)"%s*%)')
           or line:match("#bibliography%s*%(%s*'([^']+)'%s*%)")
         if bib_file then
