@@ -214,7 +214,9 @@ local function detect_context_files()
     end
 
     -- Resolve relative paths
-    if not vim.fn.fnamemodify(file_path, ":p"):match("^/") then
+    -- Check if path is already absolute (Unix: starts with /, Windows: has drive letter)
+    local is_absolute = file_path:match("^/") or file_path:match("^%a:")
+    if not is_absolute then
       file_path = vim.fs.joinpath(current_dir, file_path)
     end
 
@@ -232,24 +234,49 @@ local function detect_context_files()
   if filetype == "pandoc" or filetype == "markdown" or filetype == "rmd" or filetype == "md" then
     -- YAML frontmatter: bibliography: file_path
     -- Can be single or multiple files
+    local in_bibliography_array = false
+    local yaml_depth = 0
+
     for _, line in ipairs(lines) do
-      -- Match single file: bibliography: path/to/file.bib
-      local file_path = line:match("^%s*bibliography:%s*(.+)$")
-      if file_path then
-        file_path = vim.trim(file_path)
-        -- Remove quotes if present
-        file_path = file_path:gsub("^['\"]", ""):gsub("['\"]$", "")
-        add_file(file_path)
+      -- Track YAML frontmatter boundaries
+      if line:match("^%-%-%-") then
+        yaml_depth = yaml_depth + 1
+        if yaml_depth > 1 then
+          -- Exited YAML frontmatter
+          break
+        end
       end
 
-      -- Match array item: - path/to/file.bib (following a bibliography: line)
-      local array_item = line:match("^%s*%-%s*(.+)$")
-      if array_item then
-        array_item = vim.trim(array_item)
-        -- Only consider it if it looks like a file path
-        if array_item:match("%.bib$") then
-          array_item = array_item:gsub("^['\"]", ""):gsub("['\"]$", "")
-          add_file(array_item)
+      if yaml_depth == 1 then
+        -- Match single file: bibliography: path/to/file.bib
+        local file_path = line:match("^%s*bibliography:%s*(.+)$")
+        if file_path then
+          file_path = vim.trim(file_path)
+          -- Check if it's the start of an array (ends with ':' or is empty)
+          if file_path == "" or file_path:match(":$") then
+            in_bibliography_array = true
+          else
+            -- Single file value
+            file_path = file_path:gsub("^['\"]", ""):gsub("['\"]$", "")
+            add_file(file_path)
+            in_bibliography_array = false
+          end
+        elseif in_bibliography_array then
+          -- Match array item: - path/to/file.bib
+          local array_item = line:match("^%s*%-%s*(.+)$")
+          if array_item then
+            array_item = vim.trim(array_item)
+            -- Only consider it if it looks like a file path
+            if array_item:match("%.bib") then
+              array_item = array_item:gsub("^['\"]", ""):gsub("['\"]$", "")
+              add_file(array_item)
+            end
+          elseif not line:match("^%s*$") and not line:match("^%s*#") then
+            -- Non-empty, non-comment line that's not an array item ends the array
+            if not line:match("^%s+") or line:match("^%s*%w+:") then
+              in_bibliography_array = false
+            end
+          end
         end
       end
     end
@@ -291,26 +318,26 @@ end
 ---When context is enabled, returns context-detected files or falls back based on context_fallback.
 ---When context is disabled, uses explicit files or searches the project directory.
 ---@param cfg SnacksBibtexConfig
----@return string[]
+---@return string[], boolean # files, has_context
 local function find_project_files(cfg)
   -- Check for context-aware file detection
   if cfg.context then
     local context_files = detect_context_files()
     if context_files and #context_files > 0 then
       -- Context found, return these files (ignoring global_files and normal search)
-      return context_files
+      return context_files, true
     end
     -- No context found
     if not cfg.context_fallback then
       -- No fallback, return empty
-      return {}
+      return {}, false
     end
     -- Fall through to normal behavior
   end
 
   -- Normal behavior: use explicit files or search
   if cfg.files then
-    return vim.deepcopy(cfg.files)
+    return vim.deepcopy(cfg.files), false
   end
   local cwd = (vim.uv and vim.uv.cwd()) or vim.loop.cwd()
   local opts = { path = cwd, type = "file" }
@@ -320,7 +347,7 @@ local function find_project_files(cfg)
   local found = vim.fs.find(function(name, _)
     return name:lower():match("%.bib$") ~= nil
   end, opts)
-  return found
+  return found, false
 end
 
 ---Load BibTeX entries from files, respecting context awareness.
@@ -331,9 +358,8 @@ function M.load_entries(cfg)
   local files = {}
   local seen = {} ---@type table<string, boolean>
 
-  -- Get project files (may be context-aware)
-  local project_files = find_project_files(cfg)
-  local has_context = cfg.context and detect_context_files() ~= nil
+  -- Get project files (may be context-aware) and cache context status
+  local project_files, has_context = find_project_files(cfg)
 
   for _, path in ipairs(project_files) do
     if not seen[path] then
