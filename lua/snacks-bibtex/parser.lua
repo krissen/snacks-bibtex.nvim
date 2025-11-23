@@ -249,11 +249,20 @@ local function detect_context_files()
     ---@param text string
     ---@return string
     local function strip_yaml_comment(text)
-      -- Simple approach: find # and remove everything after it
-      -- This doesn't handle quoted strings, but for file paths this is usually fine
-      local comment_pos = text:find("#")
-      if comment_pos then
-        return text:sub(1, comment_pos - 1)
+      -- Improved approach: remove text after # only if # is outside of quotes
+      -- Handles both single and double quoted strings
+      local in_single = false
+      local in_double = false
+      for i = 1, #text do
+        local c = text:sub(i, i)
+        if c == "'" and not in_double then
+          in_single = not in_single
+        elseif c == '"' and not in_single then
+          in_double = not in_double
+        elseif c == "#" and not in_single and not in_double then
+          -- Found # outside quotes; return up to previous character
+          return text:sub(1, i - 1)
+        end
       end
       return text
     end
