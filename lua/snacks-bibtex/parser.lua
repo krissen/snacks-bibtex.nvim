@@ -353,24 +353,26 @@ local function detect_context_files()
           -- Read and parse the imported file for bibliography calls
           local import_stat = uv.fs_stat(normalized_import)
           if import_stat and import_stat.type == "file" then
-            local import_lines = vim.fn.readfile(normalized_import)
-            for _, import_line in ipairs(import_lines) do
-              if not import_line:match("^%s*//") then
-                local bib_file = import_line:match('#bibliography%s*%(%s*"([^"]+)"%s*%)')
-                  or import_line:match("#bibliography%s*%(%s*'([^']+)'%s*%)")
-                  or import_line:match('#let%s+%w+%s*=%s*bibliography%s*%(%s*"([^"]+)"%s*%)')
-                  or import_line:match("#let%s+%w+%s*=%s*bibliography%s*%(%s*'([^']+)'%s*%)")
-                if bib_file then
-                  -- Resolve relative path from imported file's directory
-                  local import_dir = vim.fn.fnamemodify(normalized_import, ":h")
-                  local bib_path
-                  local is_bib_absolute = bib_file:match("^/") or bib_file:match("^%a:[/\\]")
-                  if not is_bib_absolute then
-                    bib_path = vim.fs.joinpath(import_dir, bib_file)
-                  else
-                    bib_path = bib_file
+            local ok, import_lines = pcall(vim.fn.readfile, normalized_import)
+            if ok and import_lines then
+              for _, import_line in ipairs(import_lines) do
+                if not import_line:match("^%s*//") then
+                  local bib_file = import_line:match('#bibliography%s*%(%s*"([^"]+)"%s*%)')
+                    or import_line:match("#bibliography%s*%(%s*'([^']+)'%s*%)")
+                    or import_line:match('#let%s+%w+%s*=%s*bibliography%s*%(%s*"([^"]+)"%s*%)')
+                    or import_line:match("#let%s+%w+%s*=%s*bibliography%s*%(%s*'([^']+)'%s*%)")
+                  if bib_file then
+                    -- Resolve relative path from imported file's directory
+                    local import_dir = vim.fn.fnamemodify(normalized_import, ":h")
+                    local bib_path
+                    local is_bib_absolute = bib_file:match("^/") or bib_file:match("^%a:[/\\]")
+                    if not is_bib_absolute then
+                      bib_path = vim.fs.joinpath(import_dir, bib_file)
+                    else
+                      bib_path = bib_file
+                    end
+                    add_file(vim.trim(bib_path))
                   end
-                  add_file(vim.trim(bib_path))
                 end
               end
             end
