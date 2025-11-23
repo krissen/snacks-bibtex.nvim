@@ -207,7 +207,7 @@ local function detect_context_files()
     end
 
     -- Expand user paths and environment variables
-    if file_path:find("[~$]") then
+    if file_path:match("^~") or file_path:match("%$%w+") then
       local ok, expanded = pcall(vim.fn.expand, file_path)
       if ok and type(expanded) == "string" and expanded ~= "" then
         file_path = expanded
@@ -249,13 +249,27 @@ local function detect_context_files()
       end
 
       if yaml_depth == 1 then
-        -- Match single file: bibliography: path/to/file.bib
+        -- Match single file or inline array: bibliography: path/to/file.bib or bibliography: [file1.bib, file2.bib]
         local file_path = line:match("^%s*bibliography:%s*(.+)$")
         if file_path then
           file_path = vim.trim(file_path)
-          -- Check if it's the start of an array (empty value after colon)
+          -- Check if it's the start of a multi-line array (empty value after colon)
           if file_path == "" then
             in_bibliography_array = true
+          -- Check if it's an inline array [file1.bib, file2.bib]
+          elseif file_path:match("^%[.+%]$") then
+            -- Parse inline array
+            local array_content = file_path:match("^%[(.+)%]$")
+            if array_content then
+              for item in array_content:gmatch("[^,]+") do
+                item = vim.trim(item)
+                item = item:gsub("^['\"]", ""):gsub("['\"]$", "")
+                if item ~= "" then
+                  add_file(item)
+                end
+              end
+            end
+            in_bibliography_array = false
           else
             -- Single file value
             file_path = file_path:gsub("^['\"]", ""):gsub("['\"]$", "")
@@ -267,8 +281,8 @@ local function detect_context_files()
           local array_item = line:match("^%s*%-%s*(.+)$")
           if array_item then
             array_item = vim.trim(array_item)
-            -- Only consider it if it looks like a bibliography file
-            if array_item:match("%.bib$") or array_item:match("%.bibtex$") then
+            -- Accept any non-empty string as a bibliography file in array context
+            if array_item ~= "" then
               array_item = array_item:gsub("^['\"]", ""):gsub("['\"]$", "")
               add_file(array_item)
             end
@@ -285,29 +299,32 @@ local function detect_context_files()
   elseif filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
     -- LaTeX: \bibliography{file} or \addbibresource{file}
     for _, line in ipairs(lines) do
-      -- \bibliography{file} - file without extension
-      local bib_file = line:match("\\bibliography%s*{([^}]+)}")
-      if bib_file then
-        bib_file = vim.trim(bib_file)
-        -- Split on commas for multiple files
-        for file in bib_file:gmatch("[^,]+") do
-          file = vim.trim(file)
-          -- \bibliography command doesn't include .bib extension
-          if not file:match("%.bib$") then
-            file = file .. ".bib"
+      -- Skip LaTeX comment lines
+      if not line:match("^%s*%%") then
+        -- \bibliography{file} - file without extension
+        local bib_file = line:match("\\bibliography%s*{([^}]+)}")
+        if bib_file then
+          bib_file = vim.trim(bib_file)
+          -- Split on commas for multiple files
+          for file in bib_file:gmatch("[^,]+") do
+            file = vim.trim(file)
+            -- \bibliography command doesn't include .bib extension
+            if not file:match("%.bib$") and not file:match("%.bibtex$") then
+              file = file .. ".bib"
+            end
+            add_file(file)
           end
-          add_file(file)
         end
-      end
 
-      -- \addbibresource{file} - file with extension
-      local addbib_file = line:match("\\addbibresource%s*{([^}]+)}")
-      if addbib_file then
-        addbib_file = vim.trim(addbib_file)
-        -- Split on commas for multiple files
-        for file in addbib_file:gmatch("[^,]+") do
-          file = vim.trim(file)
-          add_file(file)
+        -- \addbibresource{file} - file with extension
+        local addbib_file = line:match("\\addbibresource%s*{([^}]+)}")
+        if addbib_file then
+          addbib_file = vim.trim(addbib_file)
+          -- Split on commas for multiple files
+          for file in addbib_file:gmatch("[^,]+") do
+            file = vim.trim(file)
+            add_file(file)
+          end
         end
       end
     end
