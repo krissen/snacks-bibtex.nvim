@@ -133,7 +133,7 @@ require("snacks-bibtex").setup({
   files = nil,                      -- explicit list of project-local bib files (supports ~ / $ENV expansion)
   global_files = {},                -- list of additional bib files (supports ~ / $ENV expansion)
   context = true,                   -- enable context-aware bibliography file detection (recommended)
-  context_fallback = true,          -- when context=true: fall back to searching project directory if no context found; when false: show no entries if context is missing
+  context_fallback = true,          -- when context=true and no context found: true=fall back to project search, false=show no entries
   search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
   match_priority = { "author", "year", "title" }, -- remaining search_fields are appended automatically
   format = "%s",                    -- how keys are inserted with <CR>
