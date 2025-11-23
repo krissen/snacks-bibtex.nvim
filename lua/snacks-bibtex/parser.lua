@@ -419,7 +419,8 @@ local function detect_context_files()
           end
           -- Preserve newlines
           local removed = text:sub(start_i, i - 1)
-          for _ in removed:gmatch("\n") do
+          local _, newline_count = removed:gsub('\n', '')
+          for _ = 1, newline_count do
             result[#result + 1] = "\n"
           end
         else
