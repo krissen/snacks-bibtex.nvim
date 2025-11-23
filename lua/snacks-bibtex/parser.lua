@@ -175,8 +175,9 @@ local function parse_entries(text, path)
 end
 
 ---Detect bibliography files from the current buffer based on filetype-specific context lines.
+---Supports .bib and .bibtex extensions.
 ---Supports:
---- - pandoc, markdown, rmd: YAML frontmatter `bibliography: file_path`
+--- - pandoc, markdown, rmd: YAML frontmatter `bibliography: file_path` (single or array)
 --- - tex: `\bibliography{file}` or `\addbibresource{file}`
 ---@return string[]|nil
 local function detect_context_files()
@@ -252,8 +253,8 @@ local function detect_context_files()
         local file_path = line:match("^%s*bibliography:%s*(.+)$")
         if file_path then
           file_path = vim.trim(file_path)
-          -- Check if it's the start of an array (ends with ':' or is empty)
-          if file_path == "" or file_path:match(":$") then
+          -- Check if it's the start of an array (empty value after colon)
+          if file_path == "" then
             in_bibliography_array = true
           else
             -- Single file value
@@ -262,18 +263,19 @@ local function detect_context_files()
             in_bibliography_array = false
           end
         elseif in_bibliography_array then
-          -- Match array item: - path/to/file.bib
+          -- Match array item: - path/to/file.bib or - path/to/file.bibtex
           local array_item = line:match("^%s*%-%s*(.+)$")
           if array_item then
             array_item = vim.trim(array_item)
-            -- Only consider it if it looks like a file path ending with .bib
-            if array_item:match("%.bib$") then
+            -- Only consider it if it looks like a bibliography file
+            if array_item:match("%.bib$") or array_item:match("%.bibtex$") then
               array_item = array_item:gsub("^['\"]", ""):gsub("['\"]$", "")
               add_file(array_item)
             end
           elseif not line:match("^%s*$") and not line:match("^%s*#") then
-            -- Non-empty, non-comment line that's not an array item ends the array
-            if not line:match("^%s+") or line:match("^%s*%w+:") then
+            -- Non-empty, non-comment line that's not an array item
+            -- Check if it's a new YAML key (not indented further than bibliography:)
+            if line:match("^%w+:") then
               in_bibliography_array = false
             end
           end
