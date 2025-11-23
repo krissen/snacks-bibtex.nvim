@@ -328,6 +328,23 @@ local function detect_context_files()
         end
       end
     end
+  elseif filetype == "typst" then
+    -- Typst: #bibliography("file.bib") or #bibliography("file.yml")
+    for _, line in ipairs(lines) do
+      -- Skip Typst comment lines
+      if not line:match("^%s*//") then
+        -- Match #bibliography("file.bib") or #bibliography("file.yml")
+        local bib_file = line:match('#bibliography%s*%(%s*"([^"]+)"%s*%)')
+        if not bib_file then
+          -- Try with single quotes
+          bib_file = line:match("#bibliography%s*%(%s*'([^']+)'%s*%)")
+        end
+        if bib_file then
+          bib_file = vim.trim(bib_file)
+          add_file(bib_file)
+        end
+      end
+    end
   end
 
   return #files > 0 and files or nil

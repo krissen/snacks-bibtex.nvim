@@ -906,6 +906,21 @@ local function init_defaults()
         packages = "biblatex",
         enabled = false,
       },
+      -- Typst
+      {
+        command = "@key",
+        template = "@{{key}}",
+        description = "Basic citation (Typst)",
+        packages = "typst",
+        enabled = true,
+      },
+      {
+        command = "@key[supplement]",
+        template = "@{{key}}[]",
+        description = "Citation with supplement (Typst)",
+        packages = "typst",
+        enabled = true,
+      },
     },
     citation_formats = {
       {

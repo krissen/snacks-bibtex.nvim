@@ -7,22 +7,22 @@ Scan local and global `*.bib` files, preview entries, and insert citation keys o
 ## ✨ Features
 
 - 📖 **Flexible BibTeX integration** – Finds entries from project-local and global libraries
-- 🎯 **Context awareness** – Auto-detect bibliography files from YAML frontmatter or LaTeX preambles
+- 🎯 **Context awareness** – Auto-detect bibliography files from YAML frontmatter, LaTeX preambles, or Typst documents
 - 🔍 **Smart search** – Configurable fields (author, title, year, …) with LaTeX accent awareness
 - 📝 **Multiple insertion modes** – Citation keys, formatted references, full entries, or individual fields
 - 🎯 **Rich previews** – See BibTeX source and formatted output before inserting
-- ⚡ **Quick shortcuts** – Pre-configured for `\cite`, `\citep`, `\citet`, and common citation formats
+- ⚡ **Quick shortcuts** – Pre-configured for `\cite`, `\citep`, `\citet`, `@key`, and common citation formats
 - 🎨 **Citation styles** – APA 7, Harvard, Oxford templates with live preview
 - 🔧 **Highly customizable** – Mappings, sorting, format templates via Lua
 - 📊 **Frecency sorting** – Frequently and recently used entries float to the top
-- 🎭 **Command picker** – Browse and preview the full BibTeX/natbib/BibLaTeX catalog
+- 🎭 **Command picker** – Browse and preview the full BibTeX/natbib/BibLaTeX/Typst catalog
 - 🧭 **Jump to source** – Navigate directly to BibTeX entries for editing
 
 ## 🤔 Why this plugin?
 
 While [vimtex](https://github.com/lervag/vimtex) combined with completion plugins like [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) provides excellent LaTeX citation support, there are scenarios where a dedicated BibTeX picker is valuable:
 
-- **Beyond LaTeX** – Writing Markdown, Org-mode, or other formats that use BibTeX but aren't LaTeX documents
+- **Beyond LaTeX** – Writing Markdown, Org-mode, Typst, or other formats that use BibTeX but aren't LaTeX documents
 - **Custom workflows** – Manual invocation for citation insertion in any context
 - **Unsupported commands** – Custom `\cite*` variants that completion engines don't recognize
 - **Universal access** – Quick reference lookup regardless of the current document type
@@ -185,6 +185,7 @@ When `context = true`, snacks-bibtex looks for context lines in your currently o
 | `pandoc`, `markdown`, `md`, `rmd` | YAML frontmatter `bibliography:` | `bibliography: refs.bib` or array format |
 | `tex`, `plaintex`, `latex` | `\bibliography{file}` | `\bibliography{references}` (extension added automatically) |
 | `tex`, `plaintex`, `latex` | `\addbibresource{file}` | `\addbibresource{references.bib}` |
+| `typst` | `#bibliography("file")` | `#bibliography("references.bib")` or `#bibliography("references.yml")` |
 
 **Example Markdown file with context:**
 ```markdown
@@ -205,6 +206,14 @@ Citations go here [@key].
 \begin{document}
 Citations go here \cite{key}.
 \end{document}
+```
+
+**Example Typst file with context:**
+```typst
+#bibliography("references.bib")
+
+= Introduction
+Citations go here @key.
 ```
 
 **Configuration example:**
@@ -293,6 +302,8 @@ Pressing `<C-c>` opens a dedicated picker with all enabled citation templates. E
 | `\autocite{<key>}` | BibLaTeX | Context-aware cite |
 | `\nocite{<key>}` | BibTeX, BibLaTeX | Bibliography-only |
 | `\fullcite{<key>}` | BibLaTeX | Full citation |
+| `@<key>` | Typst | Basic citation |
+| `@<key>[supplement]` | Typst | Citation with supplement |
 
 All other BibTeX, natbib, and BibLaTeX `\cite*` variants ship with the plugin but are disabled by default to keep the picker concise.
 
@@ -377,12 +388,13 @@ All bundled templates render canonical snippets such as `\cite{key}` without ext
 
 ### Bundled command catalog
 
-The plugin ships ready-to-enable templates for every `\cite`-family command provided by BibTeX, natbib, and BibLaTeX. Commands are grouped below for convenience:
+The plugin ships ready-to-enable templates for every `\cite`-family command provided by BibTeX, natbib, and BibLaTeX, plus Typst citation formats. Commands are grouped below for convenience:
 
 - **BibTeX**: `\cite`, `\cite*`, `\nocite`.
 - **natbib**: `\citet`, `\citet*`, `\Citet`, `\citep`, `\citep*`, `\Citep`, `\citealt`, `\citealt*`, `\Citealt`, `\citealp`, `\citealp*`, `\Citealp`, `\citeauthor`, `\citeauthor*`, `\citeyear`, `\citeyear*`, `\citeyearpar`, `\cites`.
 - **BibLaTeX single-entry**: `\cite`, `\cite*`, `\Cite`, `\Cite*`, `\parencite`, `\parencite*`, `\Parencite`, `\Parencite*`, `\footcite`, `\footcite*`, `\Footcite`, `\Footcite*`, `\footcitetext`, `\footfullcite`, `\textcite`, `\textcite*`, `\Textcite`, `\Textcite*`, `\smartcite`, `\smartcite*`, `\Smartcite`, `\Smartcite*`, `\autocite`, `\autocite*`, `\Autocite`, `\Autocite*`, `\supercite`, `\Supercite`, `\fullcite`, `\nocite`, `\citeauthor`, `\citeauthor*`, `\Citeauthor`, `\Citeauthor*`, `\citetitle`, `\citetitle*`, `\Citetitle`, `\Citetitle*`, `\citeyear`, `\citeyear*`, `\citeurl`, `\citeurldate`, `\citedate`, `\citedate*`, `\Citedate`, `\Citedate*`, `\volcite`, `\pvolcite`, `\fvolcite`, `\svolcite`.
 - **BibLaTeX multi-entry**: `\cites`, `\Cites`, `\parencites`, `\Parencites`, `\footcites`, `\Footcites`, `\textcites`, `\Textcites`, `\smartcites`, `\Smartcites`, `\autocites`, `\Autocites`, `\supercites`, `\Supercites`, `\nocites`, `\fullcites`, `\footfullcites`, `\volcites`, `\pvolcites`, `\fvolcites`, `\svolcites`.
+- **Typst**: `@key`, `@key[supplement]`.
 
 ## 🎨 Citation Formats
 
