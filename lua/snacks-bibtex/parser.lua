@@ -402,15 +402,17 @@ local function detect_context_files()
       local i = 1
       local len = #text
       while i <= len do
-        if i + 1 <= len and text:sub(i, i+1) == "/*" then
+        local two_chars = i + 1 <= len and text:sub(i, i+1) or ""
+        if two_chars == "/*" then
           local depth = 1
           local start_i = i
           i = i + 2
           while i <= len and depth > 0 do
-            if i + 1 <= len and text:sub(i, i+1) == "/*" then
+            two_chars = i + 1 <= len and text:sub(i, i+1) or ""
+            if two_chars == "/*" then
               depth = depth + 1
               i = i + 2
-            elseif i + 1 <= len and text:sub(i, i+1) == "*/" then
+            elseif two_chars == "*/" then
               depth = depth - 1
               i = i + 2
             else
@@ -447,6 +449,17 @@ local function detect_context_files()
         return text:sub(1, comment_pos - 1)
       end
       return text
+    end
+    
+    ---Extract bibliography file path from Typst line
+    ---Matches #bibliography("file") or #let var = bibliography("file") patterns
+    ---@param line string
+    ---@return string|nil
+    local function extract_bib_file(line)
+      return line:match('#bibliography%s*%(%s*"([^"]+)"%s*%)')
+        or line:match("#bibliography%s*%(%s*'([^']+)'%s*%)")
+        or line:match('#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*"([^"]+)"%s*%)')
+        or line:match("#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*'([^']+)'%s*%)")
     end
     
     -- Split back into lines after removing block comments
@@ -488,10 +501,7 @@ local function detect_context_files()
                   -- Strip inline comments
                   import_line = strip_typst_inline_comment(import_line)
                   
-                  local bib_file = import_line:match('#bibliography%s*%(%s*"([^"]+)"%s*%)')
-                    or import_line:match("#bibliography%s*%(%s*'([^']+)'%s*%)")
-                    or import_line:match('#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*"([^"]+)"%s*%)')
-                    or import_line:match("#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*'([^']+)'%s*%)")
+                  local bib_file = extract_bib_file(import_line)
                   if bib_file then
                     -- Resolve relative path from imported file's directory
                     local import_dir = vim.fn.fnamemodify(normalized_import, ":h")
@@ -511,10 +521,7 @@ local function detect_context_files()
         
         -- Match direct #bibliography("file.bib") or #bibliography("file.yml") calls
         -- Also match #let assignments like: #let my-refs = bibliography("file.bib")
-        local bib_file = line:match('#bibliography%s*%(%s*"([^"]+)"%s*%)')
-          or line:match("#bibliography%s*%(%s*'([^']+)'%s*%)")
-          or line:match('#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*"([^"]+)"%s*%)')
-          or line:match("#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*'([^']+)'%s*%)")
+        local bib_file = extract_bib_file(line)
         if bib_file then
           bib_file = vim.trim(bib_file)
           add_file(bib_file)
