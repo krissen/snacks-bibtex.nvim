@@ -132,7 +132,7 @@ require("snacks-bibtex").setup({
   depth = 1,                        -- recursion depth for project search (nil for unlimited)
   files = nil,                      -- explicit list of project-local bib files (supports ~ / $ENV expansion)
   global_files = {},                -- list of additional bib files (supports ~ / $ENV expansion)
-  context = true,                   -- enable context-aware bibliography file detection (recommended)
+  context = false,                  -- enable context-aware bibliography file detection
   context_fallback = true,          -- when context=true and no context found: true=fall back to project search, false=show no entries
   search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
   match_priority = { "author", "year", "title" }, -- remaining search_fields are appended automatically
@@ -254,7 +254,7 @@ display = {
 
 ### Context-aware bibliography file detection
 
-When `context = true` (the default), snacks-bibtex looks for context lines in your currently opened file that specify which bibliography file(s) to use. This is particularly useful for multi-project workflows where different documents reference different bibliography files.
+When `context = true`, snacks-bibtex looks for context lines in your currently opened file that specify which bibliography file(s) to use. This is particularly useful for multi-project workflows where different documents reference different bibliography files. By default, `context = false`, meaning the plugin will always search your project directory for `.bib` files and include `global_files`.
 
 **How it works:**
 - When context is detected (e.g., `bibliography:` in YAML frontmatter or `\addbibresource{}` in LaTeX), **only** those files are used
@@ -325,7 +325,7 @@ Where `refs.typ` contains:
 **Configuration example:**
 ```lua
 require("snacks-bibtex").setup({
-  context = true,           -- Enable context awareness (default)
+  context = true,           -- Enable context awareness (default: false)
   context_fallback = true,  -- Fall back to project search if no context found (default)
 })
 
@@ -335,9 +335,9 @@ require("snacks-bibtex").setup({
   context_fallback = false,  -- No fallback: require explicit bibliography declaration
 })
 
--- To disable context awareness entirely (always search project):
+-- Default behavior (always search project):
 require("snacks-bibtex").setup({
-  context = false,  -- Always use project directory search
+  context = false,  -- Always use project directory search (default)
 })
 ```
 
