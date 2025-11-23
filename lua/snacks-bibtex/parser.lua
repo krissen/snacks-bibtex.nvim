@@ -332,8 +332,15 @@ local function detect_context_files()
       local i = 1
       while i <= #text do
         if text:sub(i, i) == "%" then
-          -- Check if it's escaped
-          if i > 1 and text:sub(i - 1, i - 1) == "\\" then
+          -- Count preceding backslashes
+          local num_backslashes = 0
+          local j = i - 1
+          while j > 0 and text:sub(j, j) == "\\" do
+            num_backslashes = num_backslashes + 1
+            j = j - 1
+          end
+          -- If odd number of backslashes, the % is escaped; if even (including 0), it's a comment
+          if num_backslashes % 2 == 1 then
             -- Escaped %, keep it
             result[#result + 1] = "%"
             i = i + 1
@@ -395,15 +402,15 @@ local function detect_context_files()
       local i = 1
       local len = #text
       while i <= len do
-        if text:sub(i, i+1) == "/*" then
+        if i < len and text:sub(i, i+1) == "/*" then
           local depth = 1
           local start_i = i
           i = i + 2
           while i <= len and depth > 0 do
-            if text:sub(i, i+1) == "/*" then
+            if i < len and text:sub(i, i+1) == "/*" then
               depth = depth + 1
               i = i + 2
-            elseif text:sub(i, i+1) == "*/" then
+            elseif i < len and text:sub(i, i+1) == "*/" then
               depth = depth - 1
               i = i + 2
             else
@@ -428,6 +435,8 @@ local function detect_context_files()
     content = remove_block_comments(content)
     
     ---Remove Typst inline comments (text after //)
+    ---Note: This doesn't handle // inside string literals, but for extracting
+    ---file paths from #bibliography() and #import statements, this is typically fine
     ---@param text string
     ---@return string
     local function strip_typst_inline_comment(text)
