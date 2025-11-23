@@ -200,6 +200,13 @@ local function detect_context_files()
     current_dir = (vim.uv and vim.uv.cwd()) or vim.loop.cwd()
   end
 
+  ---Check if a path is absolute (Unix: starts with /, Windows: has drive letter)
+  ---@param path string
+  ---@return boolean
+  local function is_absolute_path(path)
+    return path:match("^/") ~= nil or path:match("^%a:[/\\]") ~= nil
+  end
+
   ---@param file_path string
   local function add_file(file_path)
     if not file_path or file_path == "" then
@@ -216,8 +223,7 @@ local function detect_context_files()
 
     -- Resolve relative paths
     -- Check if path is already absolute (Unix: starts with /, Windows: has drive letter)
-    local is_absolute = file_path:match("^/") or file_path:match("^%a:[/\\]")
-    if not is_absolute then
+    if not is_absolute_path(file_path) then
       file_path = vim.fs.joinpath(current_dir, file_path)
     end
 
@@ -332,8 +338,24 @@ local function detect_context_files()
     -- Typst: #bibliography("file.bib"), #bibliography("file.yml"), or imported references
     local imported_files = {} ---@type table<string, boolean>
     
-    for _, line in ipairs(lines) do
-      -- Skip Typst comment lines
+    -- Remove block comments from the content before processing
+    local content = table.concat(lines, "\n")
+    content = content:gsub("/%*.-%*/", function(s)
+      -- Preserve line count for accurate line tracking
+      local newline_count = select(2, s:gsub("\n", "\n"))
+      return string.rep("\n", newline_count)
+    end)
+    
+    -- Split back into lines after removing block comments
+    local processed_lines = {}
+    for line in content:gmatch("([^\n]*)\n?") do
+      if line ~= nil then
+        processed_lines[#processed_lines + 1] = line
+      end
+    end
+    
+    for _, line in ipairs(processed_lines) do
+      -- Skip Typst single-line comments
       if not line:match("^%s*//") then
         -- Match #import "refs.typ": refs pattern to find imported files
         local import_file = line:match('#import%s+"([^"]+)"%s*:')
@@ -342,8 +364,7 @@ local function detect_context_files()
           imported_files[import_file] = true
           -- Resolve relative path for imported file
           local import_path
-          local is_absolute = import_file:match("^/") or import_file:match("^%a:[/\\]")
-          if not is_absolute then
+          if not is_absolute_path(import_file) then
             import_path = vim.fs.joinpath(current_dir, import_file)
           else
             import_path = import_file
@@ -355,8 +376,17 @@ local function detect_context_files()
           if import_stat and import_stat.type == "file" then
             local ok, import_lines = pcall(vim.fn.readfile, normalized_import)
             if ok and import_lines then
-              for _, import_line in ipairs(import_lines) do
-                if not import_line:match("^%s*//") then
+              -- Remove block comments from imported file content
+              local import_content = table.concat(import_lines, "\n")
+              import_content = import_content:gsub("/%*.-%*/", function(s)
+                -- Preserve line count
+                local newline_count = select(2, s:gsub("\n", "\n"))
+                return string.rep("\n", newline_count)
+              end)
+              
+              -- Process the imported file content
+              for import_line in import_content:gmatch("([^\n]*)\n?") do
+                if import_line and not import_line:match("^%s*//") then
                   local bib_file = import_line:match('#bibliography%s*%(%s*"([^"]+)"%s*%)')
                     or import_line:match("#bibliography%s*%(%s*'([^']+)'%s*%)")
                     or import_line:match('#let%s+%w+%s*=%s*bibliography%s*%(%s*"([^"]+)"%s*%)')
@@ -365,8 +395,7 @@ local function detect_context_files()
                     -- Resolve relative path from imported file's directory
                     local import_dir = vim.fn.fnamemodify(normalized_import, ":h")
                     local bib_path
-                    local is_bib_absolute = bib_file:match("^/") or bib_file:match("^%a:[/\\]")
-                    if not is_bib_absolute then
+                    if not is_absolute_path(bib_file) then
                       bib_path = vim.fs.joinpath(import_dir, bib_file)
                     else
                       bib_path = bib_file
