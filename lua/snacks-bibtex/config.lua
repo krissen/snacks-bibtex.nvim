@@ -315,11 +315,11 @@ local function normalize_display(display)
     if type(normalized.preview_fields) ~= "table" then
       normalized.preview_fields = nil
     else
-      -- Normalize field names to lowercase and filter out empty strings
+      -- Filter out empty strings but preserve case for field names
       local fields = {}
       for _, field in ipairs(normalized.preview_fields) do
         if type(field) == "string" and field ~= "" then
-          fields[#fields + 1] = field:lower()
+          fields[#fields + 1] = field
         end
       end
       normalized.preview_fields = #fields > 0 and fields or nil

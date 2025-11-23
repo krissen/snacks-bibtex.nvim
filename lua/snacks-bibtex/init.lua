@@ -1638,8 +1638,7 @@ local function make_item(entry, cfg, now)
         parts[#parts + 1] = value
       end
     end
-    local separator = display.preview_fields_separator or " — "
-    preview = #parts > 0 and table.concat(parts, separator) or entry.key
+    preview = #parts > 0 and table.concat(parts, display.preview_fields_separator) or entry.key
   else
     preview = format_template(cfg.preview_format, entry)
     if preview == "" then
