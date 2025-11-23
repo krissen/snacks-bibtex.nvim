@@ -338,21 +338,23 @@ local function detect_context_files()
     -- Typst: #bibliography("file.bib"), #bibliography("file.yml"), or imported references
     local imported_files = {} ---@type table<string, boolean>
     
+    ---Remove block comments from content while preserving line count
+    ---@param text string
+    ---@return string
+    local function remove_block_comments(text)
+      return text:gsub("/%*.-%*/", function(s)
+        -- Preserve line count for accurate line tracking
+        local newline_count = select(2, s:gsub("\n", "\n"))
+        return string.rep("\n", newline_count)
+      end)
+    end
+    
     -- Remove block comments from the content before processing
     local content = table.concat(lines, "\n")
-    content = content:gsub("/%*.-%*/", function(s)
-      -- Preserve line count for accurate line tracking
-      local newline_count = select(2, s:gsub("\n", "\n"))
-      return string.rep("\n", newline_count)
-    end)
+    content = remove_block_comments(content)
     
     -- Split back into lines after removing block comments
-    local processed_lines = {}
-    for line in content:gmatch("([^\n]*)\n?") do
-      if line ~= nil then
-        processed_lines[#processed_lines + 1] = line
-      end
-    end
+    local processed_lines = vim.split(content, '\n', { plain = true })
     
     for _, line in ipairs(processed_lines) do
       -- Skip Typst single-line comments
@@ -378,15 +380,12 @@ local function detect_context_files()
             if ok and import_lines then
               -- Remove block comments from imported file content
               local import_content = table.concat(import_lines, "\n")
-              import_content = import_content:gsub("/%*.-%*/", function(s)
-                -- Preserve line count
-                local newline_count = select(2, s:gsub("\n", "\n"))
-                return string.rep("\n", newline_count)
-              end)
+              import_content = remove_block_comments(import_content)
               
               -- Process the imported file content
-              for import_line in import_content:gmatch("([^\n]*)\n?") do
-                if import_line and not import_line:match("^%s*//") then
+              local import_processed_lines = vim.split(import_content, '\n', { plain = true })
+              for _, import_line in ipairs(import_processed_lines) do
+                if not import_line:match("^%s*//") then
                   local bib_file = import_line:match('#bibliography%s*%(%s*"([^"]+)"%s*%)')
                     or import_line:match("#bibliography%s*%(%s*'([^']+)'%s*%)")
                     or import_line:match('#let%s+%w+%s*=%s*bibliography%s*%(%s*"([^"]+)"%s*%)')
