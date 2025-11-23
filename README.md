@@ -218,13 +218,16 @@ When `preview_fields` is set, it overrides the `preview_format` setting. The fie
 
 **Available field names:**
 
-You can use any of the following in `preview_fields`:
+You can use any of the following in `preview_fields` (field names are case-insensitive):
 
 - **BibTeX fields**: `author`, `editor`, `title`, `journal`, `journaltitle`, `booktitle`, `publisher`, `year`, `volume`, `number`, `issue`, `pages`, `doi`, `url`, `organization`, `institution`, `location`, `address`, `edition`, `series`, and any other standard BibTeX field
 - **Derived fields**: `authors.in_text`, `authors.reference`, `authors.families`, `authors.count`, `editors.collection`, `apa.in_text`, `apa.reference`
 - **Special fields**: `key`, `type`, `file`
 
 See the [Template placeholders](#template-placeholders) section for more details on derived fields.
+
+> **Note:** Using raw BibTeX field names (e.g., `"author"`, `"title"`) in `preview_fields` will return the unformatted BibTeX value (e.g., `"Smith, John and Doe, Jane"`).  
+> For formatted output (e.g., `"Smith, J. & Doe, J."`), use derived fields like `"authors.reference"` or `"apa.in_text"`.
 
 Examples:
 
@@ -233,7 +236,7 @@ Examples:
 display = {
   preview_fields = { "author", "year" },
 }
--- Result: "Smith, John and Doe, Jane — 2020"
+-- Result: "Smith, John and Doe, Jane — 2020"  (raw BibTeX value; not formatted)
 
 -- Show author, title, and journal with custom separator
 display = {

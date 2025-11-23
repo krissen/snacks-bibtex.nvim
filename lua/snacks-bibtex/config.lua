@@ -282,6 +282,13 @@ local function normalize_match_priority(priority, search_fields)
   }
 end
 
+---@param value any
+---@param default string
+---@return string
+local function normalize_separator(value, default)
+  return type(value) == "string" and value ~= "" and value or default
+end
+
 ---@param display SnacksBibtexDisplayConfig|nil
 ---@return SnacksBibtexDisplayConfig
 local function normalize_display(display)
@@ -295,37 +302,22 @@ local function normalize_display(display)
     }
   end
   local normalized = {
-    show_key = display.show_key,
-    show_preview = display.show_preview,
-    key_separator = display.key_separator,
-    preview_fields = display.preview_fields,
-    preview_fields_separator = display.preview_fields_separator,
+    show_key = (display.show_key ~= nil and type(display.show_key) == "boolean") and display.show_key or true,
+    show_preview = (display.show_preview ~= nil and type(display.show_preview) == "boolean") and display.show_preview
+      or true,
+    key_separator = normalize_separator(display.key_separator, " — "),
+    preview_fields = (type(display.preview_fields) == "table") and display.preview_fields or nil,
+    preview_fields_separator = normalize_separator(display.preview_fields_separator, " — "),
   }
-  if normalized.show_key == nil then
-    normalized.show_key = true
-  end
-  if normalized.show_preview == nil then
-    normalized.show_preview = true
-  end
-  if type(normalized.key_separator) ~= "string" or normalized.key_separator == "" then
-    normalized.key_separator = " — "
-  end
-  if type(normalized.preview_fields_separator) ~= "string" or normalized.preview_fields_separator == "" then
-    normalized.preview_fields_separator = " — "
-  end
   if normalized.preview_fields ~= nil then
-    if type(normalized.preview_fields) ~= "table" then
-      normalized.preview_fields = nil
-    else
-      -- Filter out empty strings but preserve case for field names
-      local fields = {}
-      for _, field in ipairs(normalized.preview_fields) do
-        if type(field) == "string" and field ~= "" then
-          fields[#fields + 1] = field
-        end
+    -- Filter out empty strings but preserve case for field names
+    local fields = {}
+    for _, field in ipairs(normalized.preview_fields) do
+      if type(field) == "string" and field ~= "" then
+        fields[#fields + 1] = field
       end
-      normalized.preview_fields = #fields > 0 and fields or nil
     end
+    normalized.preview_fields = #fields > 0 and fields or nil
   end
   return normalized
 end
