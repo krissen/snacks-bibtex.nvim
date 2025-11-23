@@ -1631,7 +1631,7 @@ local function make_item(entry, cfg, now)
     preview = entry.key
   end
 
-  local display = cfg.display or { show_key = true, show_preview = true, key_separator = " — " }
+  local display = cfg.display
   local label
   if display.show_key and display.show_preview then
     if preview ~= entry.key then
