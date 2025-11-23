@@ -174,9 +174,141 @@ local function parse_entries(text, path)
   return entries
 end
 
+---Detect bibliography files from the current buffer based on filetype-specific context lines.
+---Supports:
+--- - pandoc, markdown, rmd: YAML frontmatter `bibliography: file_path`
+--- - tex: `\bibliography{file}` or `\addbibresource{file}`
+---@return string[]|nil
+local function detect_context_files()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local filetype = vim.bo[bufnr].filetype
+
+  -- Get all lines from the buffer
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  if not lines or #lines == 0 then
+    return nil
+  end
+
+  local files = {}
+  local seen = {} ---@type table<string, boolean>
+
+  -- Get the directory of the current file for relative path resolution
+  local current_file = vim.api.nvim_buf_get_name(bufnr)
+  local current_dir = vim.fn.fnamemodify(current_file, ":h")
+  if current_dir == "" then
+    current_dir = (vim.uv and vim.uv.cwd()) or vim.loop.cwd()
+  end
+
+  ---@param file_path string
+  local function add_file(file_path)
+    if not file_path or file_path == "" then
+      return
+    end
+
+    -- Expand user paths and environment variables
+    if file_path:find("[~$]") then
+      local ok, expanded = pcall(vim.fn.expand, file_path)
+      if ok and type(expanded) == "string" and expanded ~= "" then
+        file_path = expanded
+      end
+    end
+
+    -- Resolve relative paths
+    if not vim.fn.fnamemodify(file_path, ":p"):match("^/") then
+      file_path = vim.fs.joinpath(current_dir, file_path)
+    end
+
+    local normalized = vim.fs.normalize(file_path)
+
+    -- Check if file exists and hasn't been added yet
+    local stat = uv.fs_stat(normalized)
+    if stat and stat.type == "file" and not seen[normalized] then
+      seen[normalized] = true
+      files[#files + 1] = normalized
+    end
+  end
+
+  -- Detect based on filetype
+  if filetype == "pandoc" or filetype == "markdown" or filetype == "rmd" or filetype == "md" then
+    -- YAML frontmatter: bibliography: file_path
+    -- Can be single or multiple files
+    for _, line in ipairs(lines) do
+      -- Match single file: bibliography: path/to/file.bib
+      local file_path = line:match("^%s*bibliography:%s*(.+)$")
+      if file_path then
+        file_path = vim.trim(file_path)
+        -- Remove quotes if present
+        file_path = file_path:gsub("^['\"]", ""):gsub("['\"]$", "")
+        add_file(file_path)
+      end
+
+      -- Match array item: - path/to/file.bib (following a bibliography: line)
+      local array_item = line:match("^%s*%-%s*(.+)$")
+      if array_item then
+        array_item = vim.trim(array_item)
+        -- Only consider it if it looks like a file path
+        if array_item:match("%.bib$") then
+          array_item = array_item:gsub("^['\"]", ""):gsub("['\"]$", "")
+          add_file(array_item)
+        end
+      end
+    end
+  elseif filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
+    -- LaTeX: \bibliography{file} or \addbibresource{file}
+    for _, line in ipairs(lines) do
+      -- \bibliography{file} - file without extension
+      local bib_file = line:match("\\bibliography%s*{([^}]+)}")
+      if bib_file then
+        bib_file = vim.trim(bib_file)
+        -- Split on commas for multiple files
+        for file in bib_file:gmatch("[^,]+") do
+          file = vim.trim(file)
+          -- \bibliography command doesn't include .bib extension
+          if not file:match("%.bib$") then
+            file = file .. ".bib"
+          end
+          add_file(file)
+        end
+      end
+
+      -- \addbibresource{file} - file with extension
+      local addbib_file = line:match("\\addbibresource%s*{([^}]+)}")
+      if addbib_file then
+        addbib_file = vim.trim(addbib_file)
+        -- Split on commas for multiple files
+        for file in addbib_file:gmatch("[^,]+") do
+          file = vim.trim(file)
+          add_file(file)
+        end
+      end
+    end
+  end
+
+  return #files > 0 and files or nil
+end
+
+---Find project bibliography files, respecting context awareness settings.
+---When context is enabled, returns context-detected files or falls back based on context_fallback.
+---When context is disabled, uses explicit files or searches the project directory.
 ---@param cfg SnacksBibtexConfig
 ---@return string[]
 local function find_project_files(cfg)
+  -- Check for context-aware file detection
+  if cfg.context then
+    local context_files = detect_context_files()
+    if context_files and #context_files > 0 then
+      -- Context found, return these files (ignoring global_files and normal search)
+      return context_files
+    end
+    -- No context found
+    if not cfg.context_fallback then
+      -- No fallback, return empty
+      return {}
+    end
+    -- Fall through to normal behavior
+  end
+
+  -- Normal behavior: use explicit files or search
   if cfg.files then
     return vim.deepcopy(cfg.files)
   end
@@ -191,22 +323,34 @@ local function find_project_files(cfg)
   return found
 end
 
+---Load BibTeX entries from files, respecting context awareness.
+---When context is enabled and found, global_files are ignored.
 ---@param cfg SnacksBibtexConfig
 ---@return SnacksBibtexEntry[], string[]
 function M.load_entries(cfg)
   local files = {}
   local seen = {} ---@type table<string, boolean>
-  for _, path in ipairs(find_project_files(cfg)) do
+
+  -- Get project files (may be context-aware)
+  local project_files = find_project_files(cfg)
+  local has_context = cfg.context and detect_context_files() ~= nil
+
+  for _, path in ipairs(project_files) do
     if not seen[path] then
       seen[path] = true
       files[#files + 1] = path
     end
   end
-  for _, path in ipairs(cfg.global_files or {}) do
-    path = vim.fs.normalize(path)
-    if not seen[path] then
-      seen[path] = true
-      files[#files + 1] = path
+
+  -- Only add global files if context is not being used
+  -- (context awareness ignores global_files as per spec)
+  if not has_context then
+    for _, path in ipairs(cfg.global_files or {}) do
+      path = vim.fs.normalize(path)
+      if not seen[path] then
+        seen[path] = true
+        files[#files + 1] = path
+      end
     end
   end
 

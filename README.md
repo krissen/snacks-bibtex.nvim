@@ -130,6 +130,8 @@ require("snacks-bibtex").setup({
   depth = 1,                        -- recursion depth for project search (nil for unlimited)
   files = nil,                      -- explicit list of project-local bib files (supports ~ / $ENV expansion)
   global_files = {},                -- list of additional bib files (supports ~ / $ENV expansion)
+  context = false,                  -- enable context-aware bibliography file detection
+  context_fallback = true,          -- fall back to non-contextual behavior if no context found (only when context=true)
   search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
   match_priority = { "author", "year", "title" }, -- remaining search_fields are appended automatically
   format = "%s",                    -- how keys are inserted with <CR>
@@ -169,6 +171,58 @@ require("snacks-bibtex").setup({
 ```
 
 Paths supplied through `files` or `global_files` may include `~` or environment variables (for example `"~/Documents/library.bib"` or `"$ZOTERO_HOME/export.bib"`); snacks-bibtex expands these before attempting to read the files.
+
+### Context-aware bibliography file detection
+
+When `context = true`, snacks-bibtex looks for context lines in your currently opened file that specify which bibliography file(s) to use. This feature ignores both `global_files` and the normal project directory search, using only the files detected from context.
+
+**Supported filetypes and context patterns:**
+
+| Filetype | Context Pattern | Example |
+|----------|----------------|---------|
+| `pandoc`, `markdown`, `md`, `rmd` | YAML frontmatter `bibliography:` | `bibliography: refs.bib` or array format |
+| `tex`, `plaintex`, `latex` | `\bibliography{file}` | `\bibliography{references}` (extension added automatically) |
+| `tex`, `plaintex`, `latex` | `\addbibresource{file}` | `\addbibresource{references.bib}` |
+
+**Example Markdown file with context:**
+```markdown
+---
+title: My Paper
+bibliography: references.bib
+---
+
+# Introduction
+Citations go here [@key].
+```
+
+**Example LaTeX file with context:**
+```latex
+\documentclass{article}
+\usepackage{biblatex}
+\addbibresource{references.bib}
+\begin{document}
+Citations go here \cite{key}.
+\end{document}
+```
+
+**Configuration example:**
+```lua
+require("snacks-bibtex").setup({
+  context = true,           -- Enable context awareness
+  context_fallback = true,  -- Use normal search if no context found
+})
+```
+
+**Per-invocation context control:**
+```lua
+-- Enable context for this call only
+require("snacks-bibtex").bibtex({ context = true })
+
+-- Disable context for this call
+require("snacks-bibtex").bibtex({ context = false })
+```
+
+When `context_fallback = true` (the default), the plugin falls back to searching the project directory if no context is found. Set `context_fallback = false` to only use context-detected files and return no entries when context is missing.
 
 ### Sorting and frecency
 
