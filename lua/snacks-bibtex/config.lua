@@ -50,7 +50,7 @@ local defaults ---@type SnacksBibtexConfig
 ---@field depth integer|nil Directory recursion depth for local bib search
 ---@field files string[]|nil Explicit list of project-local bib files
 ---@field global_files string[]|nil List of global bib files (outside project)
----@field context boolean|SnacksBibtexContextConfig|nil Context-aware bibliography detection. Can be: boolean (true=enable with defaults, false=disable), or table with {enabled,fallback,inherit,depth}
+---@field context boolean|SnacksBibtexContextConfig|nil Context-aware bibliography detection. Boolean: true=enable with defaults, false=disable. Table: {enabled: boolean, fallback: boolean, inherit: boolean, depth: integer}
 ---@field search_fields string[] Ordered list of fields to search (e.g. {"author","title","year","keywords"})
 ---@field format string Default format for inserting citation keys or labels
 ---@field preview_format string Template used to format the preview line(s)
