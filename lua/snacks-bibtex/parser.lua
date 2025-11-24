@@ -29,6 +29,46 @@ local function read_file(path)
   return data
 end
 
+---Check if a path is absolute (Unix: starts with /, Windows: has drive letter)
+---@param path string
+---@return boolean
+local function is_absolute_path(path)
+  return path:match("^/") ~= nil or path:match("^%a:[/\\]") ~= nil
+end
+
+---Remove LaTeX inline comments (text after % that isn't escaped with \%)
+---@param text string
+---@return string
+local function strip_latex_comment(text)
+  -- Find unescaped % and remove everything after it
+  local result = {}
+  local i = 1
+  while i <= #text do
+    if text:sub(i, i) == "%" then
+      -- Count preceding backslashes
+      local num_backslashes = 0
+      local j = i - 1
+      while j > 0 and text:sub(j, j) == "\\" do
+        num_backslashes = num_backslashes + 1
+        j = j - 1
+      end
+      -- If odd number of backslashes, the % is escaped; if even (including 0), it's a comment
+      if num_backslashes % 2 == 1 then
+        -- Escaped %, keep it
+        result[#result + 1] = "%"
+        i = i + 1
+      else
+        -- Unescaped %, this starts a comment - stop here
+        break
+      end
+    else
+      result[#result + 1] = text:sub(i, i)
+      i = i + 1
+    end
+  end
+  return table.concat(result)
+end
+
 ---@param line string
 ---@return integer
 local function count_braces(line)
@@ -174,13 +214,292 @@ local function parse_entries(text, path)
   return entries
 end
 
+---Find potential main LaTeX/Typst files in the project directory that might include the current file.
+---Supports LaTeX inclusion patterns (\input, \include, \subfile) and Typst patterns (#include).
+---Note: Typst block comment removal is simplified and doesn't handle nested block comments.
+---@param current_file string
+---@param current_dir string
+---@param context_depth integer|nil Maximum directory depth to search for parent files (default: 1). If 0, only the current directory is searched. If nil, unlimited search up to MAX_UNLIMITED_DEPTH (not recommended). Negative values are treated as 0.
+---@param max_files integer|nil Maximum number of files to check per directory (default: 100)
+---@param filetype string The filetype (tex, typst, etc.)
+---@return string[]
+local function find_potential_main_files(current_file, current_dir, context_depth, max_files, filetype)
+  local main_files = {}
+  
+  -- Maximum depth when nil is specified to prevent infinite loops or excessive searches.
+  -- Limited to 10 levels as most project structures don't exceed this depth,
+  -- and deeper searches significantly impact performance.
+  local MAX_UNLIMITED_DEPTH = 10
+
+  -- Default to depth of 1 if not specified; treat negative values as 0
+  local max_depth = context_depth
+  if max_depth == nil then
+    -- nil means unlimited, but we cap at MAX_UNLIMITED_DEPTH to prevent infinite loops
+    max_depth = MAX_UNLIMITED_DEPTH
+  elseif max_depth < 0 then
+    max_depth = 0
+  end
+  
+  -- Default max_files to 100 if not specified
+  local file_limit = max_files or 100
+
+  -- Build list of directories to search based on depth
+  local search_dirs = { current_dir }
+  local dir = current_dir
+  for _ = 1, max_depth do
+    local parent = vim.fn.fnamemodify(dir, ":h")
+    if parent == dir then
+      -- Reached root directory
+      break
+    end
+    table.insert(search_dirs, parent)
+    dir = parent
+  end
+  
+  -- Determine file extension and inclusion patterns based on filetype
+  local file_extension, inclusion_patterns
+  if filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
+    file_extension = "%.tex$"
+    inclusion_patterns = {
+      "\\input%s*{([^}]+)}",
+      "\\include%s*{([^}]+)}",
+      "\\subfile%s*{([^}]+)}",
+      "\\subfileinclude%s*{([^}]+)}",
+    }
+  elseif filetype == "typst" then
+    file_extension = "%.typ$"
+    inclusion_patterns = {
+      '#include%s+"([^"]+)"',
+      "#include%s+'([^']+)'",
+    }
+  else
+    -- Unsupported filetype for multi-file projects
+    return {}
+  end
+
+  for _, dir in ipairs(search_dirs) do
+    local found = vim.fs.find(function(name, _)
+      return name:lower():match(file_extension) ~= nil
+    end, { path = dir, type = "file", limit = file_limit })
+
+    for _, main_file in ipairs(found) do
+      if main_file ~= current_file then
+        -- Read the file to check if it includes the current file
+        local ok, lines = pcall(vim.fn.readfile, main_file)
+        if ok and lines then
+          local content = table.concat(lines, "\n")
+          
+          -- Remove comments based on filetype
+          if filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
+            -- Remove LaTeX comments
+            content = content:gsub("%%[^\n]*", "")
+          elseif filetype == "typst" then
+            -- Remove Typst single-line comments
+            content = content:gsub("//[^\n]*", "")
+            -- Remove Typst block comments (simplified - non-greedy match may be slow for large files)
+            -- Note: This doesn't handle nested block comments, which are valid in Typst
+            content = content:gsub("/%*.-%*/", "")
+          end
+          
+          -- Check for various inclusion commands
+          for _, pattern in ipairs(inclusion_patterns) do
+            for included_file in content:gmatch(pattern) do
+              included_file = vim.trim(included_file)
+              
+              -- Handle file extension - commands may omit it
+              if filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
+                if not included_file:match("%.tex$") then
+                  included_file = included_file .. ".tex"
+                end
+              elseif filetype == "typst" then
+                if not included_file:match("%.typ$") then
+                  included_file = included_file .. ".typ"
+                end
+              end
+              
+              -- Resolve included_file relative to main_file's directory and compare full paths
+              -- Use pcall for path operations to handle potential filesystem errors
+              local main_dir = vim.fn.fnamemodify(main_file, ":h")
+              local ok_join, resolved_path = pcall(vim.fs.joinpath, main_dir, included_file)
+              if ok_join then
+                local ok_norm, normalized_path = pcall(vim.fs.normalize, resolved_path)
+                if ok_norm and normalized_path == current_file then
+                  table.insert(main_files, main_file)
+                  break
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
+  return main_files
+end
+
+---Detect bibliography files from a given file's content.
+---@param lines string[] Lines of the file
+---@param file_dir string Directory of the file (for resolving relative paths)
+---@param filetype string Filetype to use for detection
+---@return string[]|nil
+local function detect_context_files_from_content(lines, file_dir, filetype)
+  if not lines or #lines == 0 then
+    return nil
+  end
+
+  local files = {}
+  local seen = {} ---@type table<string, boolean>
+
+  ---@param file_path string
+  local function add_file(file_path)
+    if not file_path or file_path == "" then
+      return
+    end
+
+    -- Expand user paths and environment variables
+    -- Note: vim.fn.expand is smart - it only expands actual variables and returns
+    -- the original string if no expansion is possible, so the broad %$ pattern is safe
+    if file_path:match("^~") or file_path:match("%$") then
+      local ok, expanded = pcall(vim.fn.expand, file_path)
+      if ok and type(expanded) == "string" and expanded ~= "" then
+        file_path = expanded
+      end
+    end
+
+    -- Resolve relative paths
+    if not is_absolute_path(file_path) then
+      file_path = vim.fs.joinpath(file_dir, file_path)
+    end
+
+    local normalized = vim.fs.normalize(file_path)
+
+    -- Check if file exists and hasn't been added yet
+    local stat = uv.fs_stat(normalized)
+    if stat and stat.type == "file" and not seen[normalized] then
+      seen[normalized] = true
+      files[#files + 1] = normalized
+    end
+  end
+
+  -- LaTeX detection
+  if filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
+    for _, line in ipairs(lines) do
+      -- Skip LaTeX comment lines (lines starting with %)
+      if not line:match("^%s*%%") then
+        -- Strip inline comments
+        line = strip_latex_comment(line)
+
+        -- \bibliography{file} - file without extension
+        local bib_file = line:match("\\bibliography%s*{([^}]+)}")
+        if bib_file then
+          bib_file = vim.trim(bib_file)
+          -- Split on commas for multiple files
+          for file in bib_file:gmatch("[^,]+") do
+            file = vim.trim(file)
+            -- \bibliography command doesn't include .bib extension
+            if not file:match("%.bib$") and not file:match("%.bibtex$") then
+              file = file .. ".bib"
+            end
+            add_file(file)
+          end
+        end
+
+        -- \addbibresource{file} - file with extension
+        local addbib_file = line:match("\\addbibresource%s*{([^}]+)}")
+        if addbib_file then
+          addbib_file = vim.trim(addbib_file)
+          -- Split on commas for multiple files
+          for file in addbib_file:gmatch("[^,]+") do
+            file = vim.trim(file)
+            add_file(file)
+          end
+        end
+      end
+    end
+  elseif filetype == "typst" then
+    -- Typst: #bibliography("file.bib") or #let var = bibliography("file.bib")
+    -- For context inheritance, we use a simplified approach without import handling
+    
+    ---Extract bibliography file path from Typst line
+    ---Matches #bibliography("file") or #bibliography('file') patterns
+    ---@param line string
+    ---@return string|nil
+    local function extract_bib_file(line)
+      -- Match both single and double quotes
+      -- Note: Typst identifiers can contain letters, numbers, underscores, and hyphens
+      return line:match('#bibliography%s*%(%s*["\']([^"\']+)["\']%s*%)')
+        or line:match('#let%s+[%w_%-]+%s*=%s*bibliography%s*%(%s*["\']([^"\']+)["\']%s*%)')
+    end
+    
+    for _, line in ipairs(lines) do
+      -- Skip Typst comment lines (lines starting with //)
+      if not line:match("^%s*//") then
+        -- Strip inline comments (simplified - removes everything after //)
+        -- Note: This doesn't handle // inside strings, unlike the more robust approach
+        -- in detect_context_files. For context inheritance, this is acceptable because:
+        -- 1. Main files typically have #bibliography() at top level, not in strings
+        -- 2. The robust version is used for primary context detection
+        -- 3. Edge cases are rare in practice for this specific use case
+        local comment_pos = line:find("//")
+        if comment_pos then
+          line = line:sub(1, comment_pos - 1)
+        end
+        
+        -- Match #bibliography() patterns
+        local bib_file = extract_bib_file(line)
+        if bib_file then
+          bib_file = vim.trim(bib_file)
+          add_file(bib_file)
+        end
+      end
+    end
+  end
+
+  return #files > 0 and files or nil
+end
+
+---Try to inherit context from main files that include the current file.
+---@param current_file string
+---@param current_dir string
+---@param filetype string
+---@param context_depth integer|nil
+---@param max_files integer|nil
+---@return string[]|nil
+local function inherit_context_from_main_file(current_file, current_dir, filetype, context_depth, max_files)
+  -- Support LaTeX and Typst multi-file projects
+  if filetype ~= "tex" and filetype ~= "plaintex" and filetype ~= "latex" and filetype ~= "typst" then
+    return nil
+  end
+
+  -- Find potential main files
+  local main_files = find_potential_main_files(current_file, current_dir, context_depth, max_files, filetype)
+
+  -- Try to get context from each main file
+  for _, main_file in ipairs(main_files) do
+    local ok, lines = pcall(vim.fn.readfile, main_file)
+    if ok and lines then
+      local main_dir = vim.fn.fnamemodify(main_file, ":h")
+      local context_files = detect_context_files_from_content(lines, main_dir, filetype)
+      if context_files and #context_files > 0 then
+        -- Found context in a main file, return it
+        return context_files
+      end
+    end
+  end
+
+  return nil
+end
+
 ---Detect bibliography files from the current buffer based on filetype-specific context lines.
 ---Supports .bib and .bibtex extensions.
 ---Supports:
 --- - pandoc, markdown, rmd: YAML frontmatter `bibliography: file_path` (single or array)
 --- - tex: `\bibliography{file}` or `\addbibresource{file}`
+--- - Context inheritance: for sub-files without explicit bibliography, searches for main files
+---@param cfg SnacksBibtexConfig|nil Configuration (optional, used for context.inherit setting)
 ---@return string[]|nil
-local function detect_context_files()
+local function detect_context_files(cfg)
   local bufnr = vim.api.nvim_get_current_buf()
   local filetype = vim.bo[bufnr].filetype
 
@@ -197,14 +516,7 @@ local function detect_context_files()
   local current_file = vim.api.nvim_buf_get_name(bufnr)
   local current_dir = vim.fn.fnamemodify(current_file, ":h")
   if current_dir == "" then
-    current_dir = (vim.uv and vim.uv.cwd()) or vim.loop.cwd()
-  end
-
-  ---Check if a path is absolute (Unix: starts with /, Windows: has drive letter)
-  ---@param path string
-  ---@return boolean
-  local function is_absolute_path(path)
-    return path:match("^/") ~= nil or path:match("^%a:[/\\]") ~= nil
+    current_dir = uv.cwd()
   end
 
   ---@param file_path string
@@ -214,8 +526,9 @@ local function detect_context_files()
     end
 
     -- Expand user paths and environment variables
-    -- Support both $VAR and ${VAR} formats, with underscores in variable names
-    if file_path:match("^~") or file_path:match("%$[%w_]+") or file_path:match("%${[%w_]+}") then
+    -- Note: vim.fn.expand is smart - it only expands actual variables and returns
+    -- the original string if no expansion is possible, so the broad %$ pattern is safe
+    if file_path:match("^~") or file_path:match("%$") then
       local ok, expanded = pcall(vim.fn.expand, file_path)
       if ok and type(expanded) == "string" and expanded ~= "" then
         file_path = expanded
@@ -223,7 +536,6 @@ local function detect_context_files()
     end
 
     -- Resolve relative paths
-    -- Check if path is already absolute (Unix: starts with /, Windows: has drive letter)
     if not is_absolute_path(file_path) then
       file_path = vim.fs.joinpath(current_dir, file_path)
     end
@@ -331,39 +643,6 @@ local function detect_context_files()
     end
   elseif filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
     -- LaTeX: \bibliography{file} or \addbibresource{file}
-    
-    ---Remove LaTeX inline comments (text after % that isn't escaped with \%)
-    ---@param text string
-    ---@return string
-    local function strip_latex_comment(text)
-      -- Find unescaped % and remove everything after it
-      local result = {}
-      local i = 1
-      while i <= #text do
-        if text:sub(i, i) == "%" then
-          -- Count preceding backslashes
-          local num_backslashes = 0
-          local j = i - 1
-          while j > 0 and text:sub(j, j) == "\\" do
-            num_backslashes = num_backslashes + 1
-            j = j - 1
-          end
-          -- If odd number of backslashes, the % is escaped; if even (including 0), it's a comment
-          if num_backslashes % 2 == 1 then
-            -- Escaped %, keep it
-            result[#result + 1] = "%"
-            i = i + 1
-          else
-            -- Unescaped %, this starts a comment - stop here
-            break
-          end
-        else
-          result[#result + 1] = text:sub(i, i)
-          i = i + 1
-        end
-      end
-      return table.concat(result)
-    end
     
     for _, line in ipairs(lines) do
       -- Skip LaTeX comment lines (lines starting with %)
@@ -581,24 +860,60 @@ local function detect_context_files()
     end
   end
 
+  -- If no files found and context inheritance is enabled, try to inherit from main file
+  if #files == 0 and cfg and cfg.context and type(cfg.context) == "table" and cfg.context.inherit ~= false then
+    local context_depth = cfg.context.depth or 1
+    local max_files = cfg.context.max_files or 100
+    local inherited_files = inherit_context_from_main_file(current_file, current_dir, filetype, context_depth, max_files)
+    if inherited_files and #inherited_files > 0 then
+      return inherited_files
+    end
+  end
+
   return #files > 0 and files or nil
 end
 
+---Check if context detection is enabled in the configuration
+---@param cfg SnacksBibtexConfig
+---@return boolean
+local function is_context_enabled(cfg)
+  if not cfg.context then
+    return false
+  end
+  if type(cfg.context) == "table" then
+    return cfg.context.enabled == true
+  end
+  if type(cfg.context) == "boolean" then
+    return cfg.context
+  end
+  return false
+end
+
+---Get context fallback setting from configuration
+---@param cfg SnacksBibtexConfig
+---@return boolean
+local function get_context_fallback(cfg)
+  if type(cfg.context) == "table" then
+    return cfg.context.fallback ~= false
+  end
+  return true -- Default for backward compatibility
+end
+
 ---Find project bibliography files, respecting context awareness settings.
----When context is enabled, returns context-detected files or falls back based on context_fallback.
+---When context is enabled, returns context-detected files or falls back based on context.fallback.
 ---When context is disabled, uses explicit files or searches the project directory.
 ---@param cfg SnacksBibtexConfig
 ---@return string[], boolean # files, has_context
 local function find_project_files(cfg)
   -- Check for context-aware file detection
-  if cfg.context then
-    local context_files = detect_context_files()
+  if is_context_enabled(cfg) then
+    local context_files = detect_context_files(cfg)
     if context_files and #context_files > 0 then
       -- Context found, return these files (ignoring global_files and normal search)
       return context_files, true
     end
     -- No context found
-    if not cfg.context_fallback then
+    if not get_context_fallback(cfg) then
       -- No fallback, return empty
       return {}, false
     end
@@ -609,7 +924,7 @@ local function find_project_files(cfg)
   if cfg.files then
     return vim.deepcopy(cfg.files), false
   end
-  local cwd = (vim.uv and vim.uv.cwd()) or vim.loop.cwd()
+  local cwd = uv.cwd()
   local opts = { path = cwd, type = "file" }
   if cfg.depth ~= nil then
     opts.depth = cfg.depth
