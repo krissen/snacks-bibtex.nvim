@@ -194,7 +194,9 @@ local function find_potential_main_files(current_file, current_dir, context_dept
   local main_files = {}
   local current_basename = vim.fn.fnamemodify(current_file, ":t")
   
-  -- Maximum depth when nil is specified to prevent infinite loops or excessive searches
+  -- Maximum depth when nil is specified to prevent infinite loops or excessive searches.
+  -- Limited to 10 levels as most project structures don't exceed this depth,
+  -- and deeper searches significantly impact performance.
   local MAX_UNLIMITED_DEPTH = 10
 
   -- Default to depth of 1 if not specified; treat negative values as 0
@@ -262,7 +264,8 @@ local function find_potential_main_files(current_file, current_dir, context_dept
           elseif filetype == "typst" then
             -- Remove Typst single-line comments
             content = content:gsub("//[^\n]*", "")
-            -- Remove Typst block comments (simplified - doesn't handle nested)
+            -- Remove Typst block comments (simplified - non-greedy match may be slow for large files)
+            -- Note: This doesn't handle nested block comments, which are valid in Typst
             content = content:gsub("/%*.-%*/", "")
           end
           

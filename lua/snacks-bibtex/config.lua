@@ -45,7 +45,7 @@ local defaults ---@type SnacksBibtexConfig
 ---@field fallback boolean|nil When enabled and no context found: true=fall back to project search, false=show no entries (default: true)
 ---@field inherit boolean|nil When enabled and no direct context found: try to inherit from main file in multi-file projects (default: true)
 ---@field depth integer|nil Directory depth for searching parent files when inheriting context (default: 1, 0=current dir only, nil=unlimited, negative treated as 0)
----@field max_files integer|nil Maximum number of parent .tex files to check per directory when searching for main files (default: 100)
+---@field max_files integer|nil Maximum number of parent files to check per directory when searching for main files (default: 100)
 
 ---@class SnacksBibtexConfig
 ---@field depth integer|nil Directory recursion depth for local bib search
