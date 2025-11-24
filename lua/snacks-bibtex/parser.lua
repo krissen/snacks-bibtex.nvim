@@ -257,7 +257,9 @@ local function detect_context_files_from_content(lines, file_dir, filetype)
       return
     end
 
-    -- Expand user paths and environment variables (vim.fn.expand handles ~, $VAR, ${VAR})
+    -- Expand user paths and environment variables
+    -- Note: vim.fn.expand is smart - it only expands actual variables and returns
+    -- the original string if no expansion is possible, so the broad %$ pattern is safe
     if file_path:match("^~") or file_path:match("%$") then
       local ok, expanded = pcall(vim.fn.expand, file_path)
       if ok and type(expanded) == "string" and expanded ~= "" then
@@ -417,7 +419,9 @@ local function detect_context_files(cfg)
       return
     end
 
-    -- Expand user paths and environment variables (vim.fn.expand handles ~, $VAR, ${VAR})
+    -- Expand user paths and environment variables
+    -- Note: vim.fn.expand is smart - it only expands actual variables and returns
+    -- the original string if no expansion is possible, so the broad %$ pattern is safe
     if file_path:match("^~") or file_path:match("%$") then
       local ok, expanded = pcall(vim.fn.expand, file_path)
       if ok and type(expanded) == "string" and expanded ~= "" then
@@ -819,7 +823,7 @@ local function find_project_files(cfg)
   if cfg.files then
     return vim.deepcopy(cfg.files), false
   end
-  local cwd = (vim.uv and vim.uv.cwd()) or vim.loop.cwd()
+  local cwd = uv.cwd()
   local opts = { path = cwd, type = "file" }
   if cfg.depth ~= nil then
     opts.depth = cfg.depth
