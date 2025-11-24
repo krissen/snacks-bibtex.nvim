@@ -799,8 +799,9 @@ local function detect_context_files(cfg)
   end
 
   -- If no files found and context inheritance is enabled, try to inherit from main file
-  if #files == 0 and cfg and cfg.context_inherit ~= false then
-    local inherited_files = inherit_context_from_main_file(current_file, current_dir, filetype, cfg.context_depth)
+  if #files == 0 and cfg and cfg.context and type(cfg.context) == "table" and cfg.context.inherit ~= false then
+    local context_depth = cfg.context.depth or 1
+    local inherited_files = inherit_context_from_main_file(current_file, current_dir, filetype, context_depth)
     if inherited_files and #inherited_files > 0 then
       return inherited_files
     end
@@ -816,14 +817,19 @@ end
 ---@return string[], boolean # files, has_context
 local function find_project_files(cfg)
   -- Check for context-aware file detection
-  if cfg.context then
+  local context_enabled = cfg.context and ((type(cfg.context) == "table" and cfg.context.enabled) or (type(cfg.context) == "boolean" and cfg.context))
+  if context_enabled then
     local context_files = detect_context_files(cfg)
     if context_files and #context_files > 0 then
       -- Context found, return these files (ignoring global_files and normal search)
       return context_files, true
     end
     -- No context found
-    if not cfg.context_fallback then
+    local context_fallback = true
+    if type(cfg.context) == "table" then
+      context_fallback = cfg.context.fallback ~= false
+    end
+    if not context_fallback then
       -- No fallback, return empty
       return {}, false
     end
