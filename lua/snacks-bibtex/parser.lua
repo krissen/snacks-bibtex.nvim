@@ -36,6 +36,39 @@ local function is_absolute_path(path)
   return path:match("^/") ~= nil or path:match("^%a:[/\\]") ~= nil
 end
 
+---Remove LaTeX inline comments (text after % that isn't escaped with \%)
+---@param text string
+---@return string
+local function strip_latex_comment(text)
+  -- Find unescaped % and remove everything after it
+  local result = {}
+  local i = 1
+  while i <= #text do
+    if text:sub(i, i) == "%" then
+      -- Count preceding backslashes
+      local num_backslashes = 0
+      local j = i - 1
+      while j > 0 and text:sub(j, j) == "\\" do
+        num_backslashes = num_backslashes + 1
+        j = j - 1
+      end
+      -- If odd number of backslashes, the % is escaped; if even (including 0), it's a comment
+      if num_backslashes % 2 == 1 then
+        -- Escaped %, keep it
+        result[#result + 1] = "%"
+        i = i + 1
+      else
+        -- Unescaped %, this starts a comment - stop here
+        break
+      end
+    else
+      result[#result + 1] = text:sub(i, i)
+      i = i + 1
+    end
+  end
+  return table.concat(result)
+end
+
 ---@param line string
 ---@return integer
 local function count_braces(line)
@@ -352,39 +385,6 @@ local function detect_context_files_from_content(lines, file_dir, filetype)
 
   -- LaTeX detection
   if filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
-    ---Remove LaTeX inline comments (text after % that isn't escaped with \%)
-    ---@param text string
-    ---@return string
-    local function strip_latex_comment(text)
-      -- Find unescaped % and remove everything after it
-      local result = {}
-      local i = 1
-      while i <= #text do
-        if text:sub(i, i) == "%" then
-          -- Count preceding backslashes
-          local num_backslashes = 0
-          local j = i - 1
-          while j > 0 and text:sub(j, j) == "\\" do
-            num_backslashes = num_backslashes + 1
-            j = j - 1
-          end
-          -- If odd number of backslashes, the % is escaped; if even (including 0), it's a comment
-          if num_backslashes % 2 == 1 then
-            -- Escaped %, keep it
-            result[#result + 1] = "%"
-            i = i + 1
-          else
-            -- Unescaped %, this starts a comment - stop here
-            break
-          end
-        else
-          result[#result + 1] = text:sub(i, i)
-          i = i + 1
-        end
-      end
-      return table.concat(result)
-    end
-
     for _, line in ipairs(lines) do
       -- Skip LaTeX comment lines (lines starting with %)
       if not line:match("^%s*%%") then
@@ -415,6 +415,37 @@ local function detect_context_files_from_content(lines, file_dir, filetype)
             file = vim.trim(file)
             add_file(file)
           end
+        end
+      end
+    end
+  elseif filetype == "typst" then
+    -- Typst: #bibliography("file.bib") or #let var = bibliography("file.bib")
+    -- For context inheritance, we use a simplified approach without import handling
+    
+    ---Extract bibliography file path from Typst line
+    ---@param line string
+    ---@return string|nil
+    local function extract_bib_file(line)
+      return line:match('#bibliography%s*%(%s*"([^"]+)"%s*%)')
+        or line:match("#bibliography%s*%(%s*'([^']+)'%s*%)")
+        or line:match('#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*"([^"]+)"%s*%)')
+        or line:match("#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*'([^']+)'%s*%)")
+    end
+    
+    for _, line in ipairs(lines) do
+      -- Skip Typst comment lines (lines starting with //)
+      if not line:match("^%s*//") then
+        -- Strip inline comments (simple version - removes everything after //)
+        local comment_pos = line:find("//")
+        if comment_pos then
+          line = line:sub(1, comment_pos - 1)
+        end
+        
+        -- Match #bibliography() patterns
+        local bib_file = extract_bib_file(line)
+        if bib_file then
+          bib_file = vim.trim(bib_file)
+          add_file(bib_file)
         end
       end
     end
@@ -607,39 +638,6 @@ local function detect_context_files(cfg)
     end
   elseif filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
     -- LaTeX: \bibliography{file} or \addbibresource{file}
-    
-    ---Remove LaTeX inline comments (text after % that isn't escaped with \%)
-    ---@param text string
-    ---@return string
-    local function strip_latex_comment(text)
-      -- Find unescaped % and remove everything after it
-      local result = {}
-      local i = 1
-      while i <= #text do
-        if text:sub(i, i) == "%" then
-          -- Count preceding backslashes
-          local num_backslashes = 0
-          local j = i - 1
-          while j > 0 and text:sub(j, j) == "\\" do
-            num_backslashes = num_backslashes + 1
-            j = j - 1
-          end
-          -- If odd number of backslashes, the % is escaped; if even (including 0), it's a comment
-          if num_backslashes % 2 == 1 then
-            -- Escaped %, keep it
-            result[#result + 1] = "%"
-            i = i + 1
-          else
-            -- Unescaped %, this starts a comment - stop here
-            break
-          end
-        else
-          result[#result + 1] = text:sub(i, i)
-          i = i + 1
-        end
-      end
-      return table.concat(result)
-    end
     
     for _, line in ipairs(lines) do
       -- Skip LaTeX comment lines (lines starting with %)
