@@ -810,6 +810,32 @@ local function detect_context_files(cfg)
   return #files > 0 and files or nil
 end
 
+---Check if context detection is enabled in the configuration
+---@param cfg SnacksBibtexConfig
+---@return boolean
+local function is_context_enabled(cfg)
+  if not cfg.context then
+    return false
+  end
+  if type(cfg.context) == "table" then
+    return cfg.context.enabled == true
+  end
+  if type(cfg.context) == "boolean" then
+    return cfg.context
+  end
+  return false
+end
+
+---Get context fallback setting from configuration
+---@param cfg SnacksBibtexConfig
+---@return boolean
+local function get_context_fallback(cfg)
+  if type(cfg.context) == "table" then
+    return cfg.context.fallback ~= false
+  end
+  return true -- Default for backward compatibility
+end
+
 ---Find project bibliography files, respecting context awareness settings.
 ---When context is enabled, returns context-detected files or falls back based on context_fallback.
 ---When context is disabled, uses explicit files or searches the project directory.
@@ -817,19 +843,14 @@ end
 ---@return string[], boolean # files, has_context
 local function find_project_files(cfg)
   -- Check for context-aware file detection
-  local context_enabled = cfg.context and ((type(cfg.context) == "table" and cfg.context.enabled) or (type(cfg.context) == "boolean" and cfg.context))
-  if context_enabled then
+  if is_context_enabled(cfg) then
     local context_files = detect_context_files(cfg)
     if context_files and #context_files > 0 then
       -- Context found, return these files (ignoring global_files and normal search)
       return context_files, true
     end
     -- No context found
-    local context_fallback = true
-    if type(cfg.context) == "table" then
-      context_fallback = cfg.context.fallback ~= false
-    end
-    if not context_fallback then
+    if not get_context_fallback(cfg) then
       -- No fallback, return empty
       return {}, false
     end

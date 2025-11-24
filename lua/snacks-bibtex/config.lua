@@ -50,7 +50,7 @@ local defaults ---@type SnacksBibtexConfig
 ---@field depth integer|nil Directory recursion depth for local bib search
 ---@field files string[]|nil Explicit list of project-local bib files
 ---@field global_files string[]|nil List of global bib files (outside project)
----@field context boolean|SnacksBibtexContextConfig|nil Context-aware bibliography detection (boolean for backward compat, or table with enabled/fallback/inherit/depth)
+---@field context boolean|SnacksBibtexContextConfig|nil Context-aware bibliography detection. Can be: boolean (true=enable with defaults, false=disable), or table with {enabled,fallback,inherit,depth}
 ---@field search_fields string[] Ordered list of fields to search (e.g. {"author","title","year","keywords"})
 ---@field format string Default format for inserting citation keys or labels
 ---@field preview_format string Template used to format the preview line(s)
@@ -339,45 +339,40 @@ end
 ---@param old_config table|nil The full config table for backward compatibility lookups
 ---@return SnacksBibtexContextConfig
 local function normalize_context_config(context, old_config)
+  -- Default values
+  local defaults_ctx = {
+    enabled = false,
+    fallback = true,
+    inherit = true,
+    depth = 1,
+  }
+  
   -- If context is already a table, merge with defaults
   if type(context) == "table" then
-    return {
-      enabled = context.enabled ~= nil and context.enabled or false,
-      fallback = context.fallback ~= nil and context.fallback or true,
-      inherit = context.inherit ~= nil and context.inherit or true,
-      depth = context.depth or 1,
-    }
+    return vim.tbl_extend("keep", context, defaults_ctx)
   end
   
   -- Backward compatibility: if context is a boolean, check for old flat config
-  local enabled = false
-  local fallback = true
-  local inherit = true
-  local depth = 1
+  local result = vim.deepcopy(defaults_ctx)
   
   if type(context) == "boolean" then
-    enabled = context
+    result.enabled = context
   end
   
   -- Check for old flat config keys for backward compatibility
   if old_config then
     if old_config.context_fallback ~= nil then
-      fallback = old_config.context_fallback
+      result.fallback = old_config.context_fallback
     end
     if old_config.context_inherit ~= nil then
-      inherit = old_config.context_inherit
+      result.inherit = old_config.context_inherit
     end
     if old_config.context_depth ~= nil then
-      depth = old_config.context_depth
+      result.depth = old_config.context_depth
     end
   end
   
-  return {
-    enabled = enabled,
-    fallback = fallback,
-    inherit = inherit,
-    depth = depth,
-  }
+  return result
 end
 
 ---@return SnacksBibtexConfig
