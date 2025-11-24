@@ -182,21 +182,26 @@ local function parse_entries(text, path)
 end
 
 ---Find potential main LaTeX/Typst files in the project directory that might include the current file.
+---Supports LaTeX inclusion patterns (\input, \include, \subfile) and Typst patterns (#include).
+---Note: Typst block comment removal is simplified and doesn't handle nested block comments.
 ---@param current_file string
 ---@param current_dir string
----@param context_depth integer|nil Maximum directory depth to search for parent files (default: 1). If 0, only the current directory is searched. If nil, unlimited search (not recommended). Negative values are treated as 0.
+---@param context_depth integer|nil Maximum directory depth to search for parent files (default: 1). If 0, only the current directory is searched. If nil, unlimited search up to MAX_UNLIMITED_DEPTH (not recommended). Negative values are treated as 0.
 ---@param max_files integer|nil Maximum number of files to check per directory (default: 100)
 ---@param filetype string The filetype (tex, typst, etc.)
 ---@return string[]
 local function find_potential_main_files(current_file, current_dir, context_depth, max_files, filetype)
   local main_files = {}
   local current_basename = vim.fn.fnamemodify(current_file, ":t")
+  
+  -- Maximum depth when nil is specified to prevent infinite loops or excessive searches
+  local MAX_UNLIMITED_DEPTH = 10
 
   -- Default to depth of 1 if not specified; treat negative values as 0
   local max_depth = context_depth
   if max_depth == nil then
-    -- nil means unlimited, but we'll use a reasonable limit to prevent infinite loops
-    max_depth = 10
+    -- nil means unlimited, but we cap at MAX_UNLIMITED_DEPTH to prevent infinite loops
+    max_depth = MAX_UNLIMITED_DEPTH
   elseif max_depth < 0 then
     max_depth = 0
   end
@@ -278,13 +283,15 @@ local function find_potential_main_files(current_file, current_dir, context_dept
               end
               
               -- Resolve included_file relative to main_file's directory and compare full paths
+              -- Use pcall for path operations to handle potential filesystem errors
               local main_dir = vim.fn.fnamemodify(main_file, ":h")
-              local resolved_path = vim.fs.joinpath(main_dir, included_file)
-              local normalized_path = vim.fs.normalize(resolved_path)
-              
-              if normalized_path == current_file then
-                table.insert(main_files, main_file)
-                break
+              local ok_join, resolved_path = pcall(vim.fs.joinpath, main_dir, included_file)
+              if ok_join then
+                local ok_norm, normalized_path = pcall(vim.fs.normalize, resolved_path)
+                if ok_norm and normalized_path == current_file then
+                  table.insert(main_files, main_file)
+                  break
+                end
               end
             end
           end
