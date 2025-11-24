@@ -402,7 +402,7 @@ end
 --- - pandoc, markdown, rmd: YAML frontmatter `bibliography: file_path` (single or array)
 --- - tex: `\bibliography{file}` or `\addbibresource{file}`
 --- - Context inheritance: for sub-files without explicit bibliography, searches for main files
----@param cfg SnacksBibtexConfig|nil Configuration (optional, used for context_inherit setting)
+---@param cfg SnacksBibtexConfig|nil Configuration (optional, used for context.inherit setting)
 ---@return string[]|nil
 local function detect_context_files(cfg)
   local bufnr = vim.api.nvim_get_current_buf()
@@ -837,7 +837,7 @@ local function get_context_fallback(cfg)
 end
 
 ---Find project bibliography files, respecting context awareness settings.
----When context is enabled, returns context-detected files or falls back based on context_fallback.
+---When context is enabled, returns context-detected files or falls back based on context.fallback.
 ---When context is disabled, uses explicit files or searches the project directory.
 ---@param cfg SnacksBibtexConfig
 ---@return string[], boolean # files, has_context
