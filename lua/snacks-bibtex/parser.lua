@@ -174,13 +174,232 @@ local function parse_entries(text, path)
   return entries
 end
 
+---Find potential main LaTeX files in the project directory that might include the current file.
+---@param current_file string
+---@param current_dir string
+---@return string[]
+local function find_potential_main_files(current_file, current_dir)
+  local main_files = {}
+  local current_basename = vim.fn.fnamemodify(current_file, ":t")
+
+  -- Search for .tex files in the current directory and parent directories
+  local search_dirs = { current_dir }
+  local parent = vim.fn.fnamemodify(current_dir, ":h")
+  if parent ~= current_dir then
+    table.insert(search_dirs, parent)
+  end
+
+  for _, dir in ipairs(search_dirs) do
+    local found = vim.fs.find(function(name, _)
+      return name:lower():match("%.tex$") ~= nil
+    end, { path = dir, type = "file", limit = math.huge })
+
+    for _, tex_file in ipairs(found) do
+      if tex_file ~= current_file then
+        -- Read the file to check if it includes the current file
+        local ok, lines = pcall(vim.fn.readfile, tex_file)
+        if ok and lines then
+          local content = table.concat(lines, "\n")
+          -- Check for various inclusion commands
+          -- \input{file}, \include{file}, \subfile{file}, \subfileinclude{file}
+          local patterns = {
+            "\\input%s*{([^}]+)}",
+            "\\include%s*{([^}]+)}",
+            "\\subfile%s*{([^}]+)}",
+            "\\subfileinclude%s*{([^}]+)}",
+          }
+
+          for _, pattern in ipairs(patterns) do
+            for included_file in content:gmatch(pattern) do
+              included_file = vim.trim(included_file)
+              -- Handle .tex extension - LaTeX commands may omit it
+              if not included_file:match("%.tex$") then
+                included_file = included_file .. ".tex"
+              end
+              local included_basename = vim.fn.fnamemodify(included_file, ":t")
+              if included_basename == current_basename then
+                table.insert(main_files, tex_file)
+                break
+              end
+            end
+          end
+
+          -- Also check if file has \documentclass (marks it as a main file)
+          if content:match("\\documentclass") then
+            -- Store main files separately for potential use
+            -- (we'll check if they include our file later)
+          end
+        end
+      end
+    end
+  end
+
+  return main_files
+end
+
+---Detect bibliography files from a given file's content.
+---@param lines string[] Lines of the file
+---@param file_dir string Directory of the file (for resolving relative paths)
+---@param filetype string Filetype to use for detection
+---@return string[]|nil
+local function detect_context_files_from_content(lines, file_dir, filetype)
+  if not lines or #lines == 0 then
+    return nil
+  end
+
+  local files = {}
+  local seen = {} ---@type table<string, boolean>
+
+  ---Check if a path is absolute (Unix: starts with /, Windows: has drive letter)
+  ---@param path string
+  ---@return boolean
+  local function is_absolute_path(path)
+    return path:match("^/") ~= nil or path:match("^%a:[/\\]") ~= nil
+  end
+
+  ---@param file_path string
+  local function add_file(file_path)
+    if not file_path or file_path == "" then
+      return
+    end
+
+    -- Expand user paths and environment variables
+    -- Support both $VAR and ${VAR} formats, with underscores in variable names
+    if file_path:match("^~") or file_path:match("%$[%w_]+") or file_path:match("%${[%w_]+}") then
+      local ok, expanded = pcall(vim.fn.expand, file_path)
+      if ok and type(expanded) == "string" and expanded ~= "" then
+        file_path = expanded
+      end
+    end
+
+    -- Resolve relative paths
+    -- Check if path is already absolute (Unix: starts with /, Windows: has drive letter)
+    if not is_absolute_path(file_path) then
+      file_path = vim.fs.joinpath(file_dir, file_path)
+    end
+
+    local normalized = vim.fs.normalize(file_path)
+
+    -- Check if file exists and hasn't been added yet
+    local stat = uv.fs_stat(normalized)
+    if stat and stat.type == "file" and not seen[normalized] then
+      seen[normalized] = true
+      files[#files + 1] = normalized
+    end
+  end
+
+  -- LaTeX detection
+  if filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
+    ---Remove LaTeX inline comments (text after % that isn't escaped with \%)
+    ---@param text string
+    ---@return string
+    local function strip_latex_comment(text)
+      -- Find unescaped % and remove everything after it
+      local result = {}
+      local i = 1
+      while i <= #text do
+        if text:sub(i, i) == "%" then
+          -- Count preceding backslashes
+          local num_backslashes = 0
+          local j = i - 1
+          while j > 0 and text:sub(j, j) == "\\" do
+            num_backslashes = num_backslashes + 1
+            j = j - 1
+          end
+          -- If odd number of backslashes, the % is escaped; if even (including 0), it's a comment
+          if num_backslashes % 2 == 1 then
+            -- Escaped %, keep it
+            result[#result + 1] = "%"
+            i = i + 1
+          else
+            -- Unescaped %, this starts a comment - stop here
+            break
+          end
+        else
+          result[#result + 1] = text:sub(i, i)
+          i = i + 1
+        end
+      end
+      return table.concat(result)
+    end
+
+    for _, line in ipairs(lines) do
+      -- Skip LaTeX comment lines (lines starting with %)
+      if not line:match("^%s*%%") then
+        -- Strip inline comments
+        line = strip_latex_comment(line)
+
+        -- \bibliography{file} - file without extension
+        local bib_file = line:match("\\bibliography%s*{([^}]+)}")
+        if bib_file then
+          bib_file = vim.trim(bib_file)
+          -- Split on commas for multiple files
+          for file in bib_file:gmatch("[^,]+") do
+            file = vim.trim(file)
+            -- \bibliography command doesn't include .bib extension
+            if not file:match("%.bib$") and not file:match("%.bibtex$") then
+              file = file .. ".bib"
+            end
+            add_file(file)
+          end
+        end
+
+        -- \addbibresource{file} - file with extension
+        local addbib_file = line:match("\\addbibresource%s*{([^}]+)}")
+        if addbib_file then
+          addbib_file = vim.trim(addbib_file)
+          -- Split on commas for multiple files
+          for file in addbib_file:gmatch("[^,]+") do
+            file = vim.trim(file)
+            add_file(file)
+          end
+        end
+      end
+    end
+  end
+
+  return #files > 0 and files or nil
+end
+
+---Try to inherit context from main files that include the current file.
+---@param current_file string
+---@param current_dir string
+---@param filetype string
+---@return string[]|nil
+local function inherit_context_from_main_file(current_file, current_dir, filetype)
+  -- Only support LaTeX for now
+  if filetype ~= "tex" and filetype ~= "plaintex" and filetype ~= "latex" then
+    return nil
+  end
+
+  -- Find potential main files
+  local main_files = find_potential_main_files(current_file, current_dir)
+
+  -- Try to get context from each main file
+  for _, main_file in ipairs(main_files) do
+    local ok, lines = pcall(vim.fn.readfile, main_file)
+    if ok and lines then
+      local main_dir = vim.fn.fnamemodify(main_file, ":h")
+      local context_files = detect_context_files_from_content(lines, main_dir, filetype)
+      if context_files and #context_files > 0 then
+        -- Found context in a main file, return it
+        return context_files
+      end
+    end
+  end
+
+  return nil
+end
+
 ---Detect bibliography files from the current buffer based on filetype-specific context lines.
 ---Supports .bib and .bibtex extensions.
 ---Supports:
 --- - pandoc, markdown, rmd: YAML frontmatter `bibliography: file_path` (single or array)
 --- - tex: `\bibliography{file}` or `\addbibresource{file}`
+--- - Context inheritance: for sub-files without explicit bibliography, searches for main files
+---@param cfg SnacksBibtexConfig|nil Configuration (optional, used for context_inherit setting)
 ---@return string[]|nil
-local function detect_context_files()
+local function detect_context_files(cfg)
   local bufnr = vim.api.nvim_get_current_buf()
   local filetype = vim.bo[bufnr].filetype
 
@@ -581,6 +800,14 @@ local function detect_context_files()
     end
   end
 
+  -- If no files found and context inheritance is enabled, try to inherit from main file
+  if #files == 0 and cfg and cfg.context_inherit ~= false then
+    local inherited_files = inherit_context_from_main_file(current_file, current_dir, filetype)
+    if inherited_files and #inherited_files > 0 then
+      return inherited_files
+    end
+  end
+
   return #files > 0 and files or nil
 end
 
@@ -592,7 +819,7 @@ end
 local function find_project_files(cfg)
   -- Check for context-aware file detection
   if cfg.context then
-    local context_files = detect_context_files()
+    local context_files = detect_context_files(cfg)
     if context_files and #context_files > 0 then
       -- Context found, return these files (ignoring global_files and normal search)
       return context_files, true

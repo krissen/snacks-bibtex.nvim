@@ -134,6 +134,7 @@ require("snacks-bibtex").setup({
   global_files = {},                -- list of additional bib files (supports ~ / $ENV expansion)
   context = false,                  -- enable context-aware bibliography file detection
   context_fallback = true,          -- when context=true and no context found: true=fall back to project search, false=show no entries
+  context_inherit = true,           -- when context=true: try to inherit context from main files in multi-file projects (default: true)
   search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
   match_priority = { "author", "year", "title" }, -- remaining search_fields are appended automatically
   format = "%s",                    -- how keys are inserted with <CR>
@@ -362,6 +363,64 @@ require("snacks-bibtex").bibtex({ context = true, context_fallback = false })
 | `true` | `false` | Yes | Use context files only |
 | `true` | `false` | No | Show no entries |
 | `false` | any | any | Always use project search + `global_files` (context is ignored) |
+
+#### Context inheritance for multi-file projects
+
+When working with multi-file LaTeX projects (or Typst in the future), sub-files often don't explicitly mention the bibliography but depend on a main file that does. For example:
+
+**Main file (`main.tex`):**
+```latex
+\documentclass{article}
+\usepackage{biblatex}
+\addbibresource{references.bib}
+
+\input{chapters/introduction}
+\input{chapters/methods}
+
+\printbibliography
+\end{document}
+```
+
+**Sub-file (`chapters/introduction.tex`):**
+```latex
+% No \addbibresource here - depends on main.tex preamble
+\section{Introduction}
+Some text with citations \cite{key}.
+```
+
+With `context_inherit = true` (the default when `context = true`), snacks-bibtex will:
+1. First check if the current file has explicit bibliography context (e.g., `\addbibresource{}`)
+2. If not found, search for potential main files that include the current file via `\input{}`, `\include{}`, `\subfile{}`, etc.
+3. If a main file is found with bibliography context, inherit those bibliography files
+4. If no inheritance is possible, fall back to `context_fallback` behavior
+
+**Configuration:**
+```lua
+require("snacks-bibtex").setup({
+  context = true,           -- Enable context awareness
+  context_inherit = true,   -- Enable context inheritance (default: true)
+  context_fallback = true,  -- Fall back if no context or inheritance found
+})
+
+-- Disable context inheritance (strict: only direct context):
+require("snacks-bibtex").setup({
+  context = true,
+  context_inherit = false,  -- Sub-files must have their own context
+  context_fallback = false,
+})
+```
+
+**Supported inclusion patterns (LaTeX):**
+- `\input{file}` or `\input{file.tex}`
+- `\include{file}` or `\include{file.tex}`
+- `\subfile{file}` or `\subfile{file.tex}` (subfiles package)
+- `\subfileinclude{file}` (subfiles package)
+
+**Notes:**
+- Context inheritance currently supports LaTeX multi-file projects
+- The search looks in the current directory and parent directory for main files
+- Main file detection is based on finding inclusion commands that reference the current file
+- When context is inherited, `global_files` are still ignored (same as direct context)
 
 ### Sorting and frecency
 

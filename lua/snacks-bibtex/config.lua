@@ -46,6 +46,7 @@ local defaults ---@type SnacksBibtexConfig
 ---@field global_files string[]|nil List of global bib files (outside project)
 ---@field context boolean|nil Enable context-aware bibliography file detection from current buffer (default: false)
 ---@field context_fallback boolean|nil When context=true and no context found: true=fall back to project search, false=show no entries (default: true)
+---@field context_inherit boolean|nil When context=true and no direct context found: try to inherit from main file in multi-file projects (default: true)
 ---@field search_fields string[] Ordered list of fields to search (e.g. {"author","title","year","keywords"})
 ---@field format string Default format for inserting citation keys or labels
 ---@field preview_format string Template used to format the preview line(s)
@@ -336,6 +337,7 @@ local function init_defaults()
     global_files = {},
     context = false,
     context_fallback = true,
+    context_inherit = true,
     search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
     match_priority = { "author", "year", "title" },
     format = "%s",
