@@ -189,7 +189,7 @@ end
 local function find_potential_main_files(current_file, current_dir, context_depth)
   local main_files = {}
   local current_basename = vim.fn.fnamemodify(current_file, ":t")
-  
+
   -- Default to depth of 1 if not specified
   local max_depth = context_depth or 1
 
@@ -365,11 +365,6 @@ local function detect_context_files_from_content(lines, file_dir, filetype)
   return #files > 0 and files or nil
 end
 
----Try to inherit context from main files that include the current file.
----@param current_file string
----@param current_dir string
----@param filetype string
----@return string[]|nil
 ---Try to inherit context from main files that include the current file.
 ---@param current_file string
 ---@param current_dir string
