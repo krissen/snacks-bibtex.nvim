@@ -29,6 +29,13 @@ local function read_file(path)
   return data
 end
 
+---Check if a path is absolute (Unix: starts with /, Windows: has drive letter)
+---@param path string
+---@return boolean
+local function is_absolute_path(path)
+  return path:match("^/") ~= nil or path:match("^%a:[/\\]") ~= nil
+end
+
 ---@param line string
 ---@return integer
 local function count_braces(line)
@@ -244,13 +251,6 @@ local function detect_context_files_from_content(lines, file_dir, filetype)
   local files = {}
   local seen = {} ---@type table<string, boolean>
 
-  ---Check if a path is absolute (Unix: starts with /, Windows: has drive letter)
-  ---@param path string
-  ---@return boolean
-  local function is_absolute_path(path)
-    return path:match("^/") ~= nil or path:match("^%a:[/\\]") ~= nil
-  end
-
   ---@param file_path string
   local function add_file(file_path)
     if not file_path or file_path == "" then
@@ -408,14 +408,7 @@ local function detect_context_files(cfg)
   local current_file = vim.api.nvim_buf_get_name(bufnr)
   local current_dir = vim.fn.fnamemodify(current_file, ":h")
   if current_dir == "" then
-    current_dir = (vim.uv and vim.uv.cwd()) or vim.loop.cwd()
-  end
-
-  ---Check if a path is absolute (Unix: starts with /, Windows: has drive letter)
-  ---@param path string
-  ---@return boolean
-  local function is_absolute_path(path)
-    return path:match("^/") ~= nil or path:match("^%a:[/\\]") ~= nil
+    current_dir = uv.cwd()
   end
 
   ---@param file_path string
