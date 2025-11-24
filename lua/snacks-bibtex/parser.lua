@@ -423,19 +423,21 @@ local function detect_context_files_from_content(lines, file_dir, filetype)
     -- For context inheritance, we use a simplified approach without import handling
     
     ---Extract bibliography file path from Typst line
+    ---Matches #bibliography("file") or #bibliography('file') patterns
     ---@param line string
     ---@return string|nil
     local function extract_bib_file(line)
-      return line:match('#bibliography%s*%(%s*"([^"]+)"%s*%)')
-        or line:match("#bibliography%s*%(%s*'([^']+)'%s*%)")
-        or line:match('#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*"([^"]+)"%s*%)')
-        or line:match("#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*'([^']+)'%s*%)")
+      -- Match both single and double quotes
+      return line:match('#bibliography%s*%(%s*["\']([^"\']+)["\']%s*%)')
+        or line:match('#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*["\']([^"\']+)["\']%s*%)')
     end
     
     for _, line in ipairs(lines) do
       -- Skip Typst comment lines (lines starting with //)
       if not line:match("^%s*//") then
-        -- Strip inline comments (simple version - removes everything after //)
+        -- Strip inline comments (simplified - removes everything after //)
+        -- Note: Unlike strip_latex_comment, this doesn't handle // inside strings or escaped //
+        -- For context inheritance from main files, this is typically sufficient
         local comment_pos = line:find("//")
         if comment_pos then
           line = line:sub(1, comment_pos - 1)
