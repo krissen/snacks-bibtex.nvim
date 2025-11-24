@@ -184,16 +184,26 @@ end
 ---Find potential main LaTeX files in the project directory that might include the current file.
 ---@param current_file string
 ---@param current_dir string
+---@param context_depth integer|nil Maximum directory depth to search for parent files (default: 1)
 ---@return string[]
-local function find_potential_main_files(current_file, current_dir)
+local function find_potential_main_files(current_file, current_dir, context_depth)
   local main_files = {}
   local current_basename = vim.fn.fnamemodify(current_file, ":t")
+  
+  -- Default to depth of 1 if not specified
+  local max_depth = context_depth or 1
 
-  -- Search for .tex files in the current directory and parent directories
+  -- Build list of directories to search based on depth
   local search_dirs = { current_dir }
-  local parent = vim.fn.fnamemodify(current_dir, ":h")
-  if parent ~= current_dir then
+  local dir = current_dir
+  for _ = 1, max_depth do
+    local parent = vim.fn.fnamemodify(dir, ":h")
+    if parent == dir then
+      -- Reached root directory
+      break
+    end
     table.insert(search_dirs, parent)
+    dir = parent
   end
 
   for _, dir in ipairs(search_dirs) do
@@ -360,14 +370,20 @@ end
 ---@param current_dir string
 ---@param filetype string
 ---@return string[]|nil
-local function inherit_context_from_main_file(current_file, current_dir, filetype)
+---Try to inherit context from main files that include the current file.
+---@param current_file string
+---@param current_dir string
+---@param filetype string
+---@param context_depth integer|nil
+---@return string[]|nil
+local function inherit_context_from_main_file(current_file, current_dir, filetype, context_depth)
   -- Only support LaTeX for now
   if filetype ~= "tex" and filetype ~= "plaintex" and filetype ~= "latex" then
     return nil
   end
 
   -- Find potential main files
-  local main_files = find_potential_main_files(current_file, current_dir)
+  local main_files = find_potential_main_files(current_file, current_dir, context_depth)
 
   -- Try to get context from each main file
   for _, main_file in ipairs(main_files) do
@@ -789,7 +805,7 @@ local function detect_context_files(cfg)
 
   -- If no files found and context inheritance is enabled, try to inherit from main file
   if #files == 0 and cfg and cfg.context_inherit ~= false then
-    local inherited_files = inherit_context_from_main_file(current_file, current_dir, filetype)
+    local inherited_files = inherit_context_from_main_file(current_file, current_dir, filetype, cfg.context_depth)
     if inherited_files and #inherited_files > 0 then
       return inherited_files
     end

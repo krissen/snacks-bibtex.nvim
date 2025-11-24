@@ -135,6 +135,7 @@ require("snacks-bibtex").setup({
   context = false,                  -- enable context-aware bibliography file detection
   context_fallback = true,          -- when context=true and no context found: true=fall back to project search, false=show no entries
   context_inherit = true,           -- when context=true: try to inherit context from main files in multi-file projects (default: true)
+  context_depth = 1,                -- directory depth for searching parent files when inheriting context (default: 1)
   search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
   match_priority = { "author", "year", "title" }, -- remaining search_fields are appended automatically
   format = "%s",                    -- how keys are inserted with <CR>
@@ -399,6 +400,7 @@ With `context_inherit = true` (the default when `context = true`), snacks-bibtex
 require("snacks-bibtex").setup({
   context = true,           -- Enable context awareness
   context_inherit = true,   -- Enable context inheritance (default: true)
+  context_depth = 1,        -- Directory depth for parent search (default: 1)
   context_fallback = true,  -- Fall back if no context or inheritance found
 })
 
@@ -407,6 +409,13 @@ require("snacks-bibtex").setup({
   context = true,
   context_inherit = false,  -- Sub-files must have their own context
   context_fallback = false,
+})
+
+-- Search deeper for parent files (e.g., deeply nested sub-files):
+require("snacks-bibtex").setup({
+  context = true,
+  context_inherit = true,
+  context_depth = 2,        -- Search up to 2 directory levels for parent files
 })
 ```
 
@@ -418,7 +427,9 @@ require("snacks-bibtex").setup({
 
 **Notes:**
 - Context inheritance currently supports LaTeX multi-file projects
-- The search looks in the current directory and parent directory for main files
+- The `context_depth` setting controls how many directory levels up to search for parent files (default: 1)
+- With `context_depth = 1`, searches current directory and parent directory
+- With `context_depth = 2`, searches current, parent, and grandparent directories, etc.
 - Main file detection is based on finding inclusion commands that reference the current file
 - When context is inherited, `global_files` are still ignored (same as direct context)
 
