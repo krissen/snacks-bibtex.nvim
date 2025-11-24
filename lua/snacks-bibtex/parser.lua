@@ -428,16 +428,20 @@ local function detect_context_files_from_content(lines, file_dir, filetype)
     ---@return string|nil
     local function extract_bib_file(line)
       -- Match both single and double quotes
+      -- Note: Typst identifiers can contain letters, numbers, underscores, and hyphens
       return line:match('#bibliography%s*%(%s*["\']([^"\']+)["\']%s*%)')
-        or line:match('#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*["\']([^"\']+)["\']%s*%)')
+        or line:match('#let%s+[%w_%-]+%s*=%s*bibliography%s*%(%s*["\']([^"\']+)["\']%s*%)')
     end
     
     for _, line in ipairs(lines) do
       -- Skip Typst comment lines (lines starting with //)
       if not line:match("^%s*//") then
         -- Strip inline comments (simplified - removes everything after //)
-        -- Note: Unlike strip_latex_comment, this doesn't handle // inside strings or escaped //
-        -- For context inheritance from main files, this is typically sufficient
+        -- Note: This doesn't handle // inside strings, unlike the more robust approach
+        -- in detect_context_files. For context inheritance, this is acceptable because:
+        -- 1. Main files typically have #bibliography() at top level, not in strings
+        -- 2. The robust version is used for primary context detection
+        -- 3. Edge cases are rare in practice for this specific use case
         local comment_pos = line:find("//")
         if comment_pos then
           line = line:sub(1, comment_pos - 1)
