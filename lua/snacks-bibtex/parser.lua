@@ -181,17 +181,28 @@ local function parse_entries(text, path)
   return entries
 end
 
----Find potential main LaTeX files in the project directory that might include the current file.
+---Find potential main LaTeX/Typst files in the project directory that might include the current file.
 ---@param current_file string
 ---@param current_dir string
----@param context_depth integer|nil Maximum directory depth to search for parent files (default: 1)
+---@param context_depth integer|nil Maximum directory depth to search for parent files (default: 1). If 0, only the current directory is searched. If nil, unlimited search (not recommended). Negative values are treated as 0.
+---@param max_files integer|nil Maximum number of files to check per directory (default: 100)
+---@param filetype string The filetype (tex, typst, etc.)
 ---@return string[]
-local function find_potential_main_files(current_file, current_dir, context_depth)
+local function find_potential_main_files(current_file, current_dir, context_depth, max_files, filetype)
   local main_files = {}
   local current_basename = vim.fn.fnamemodify(current_file, ":t")
 
-  -- Default to depth of 1 if not specified
-  local max_depth = context_depth or 1
+  -- Default to depth of 1 if not specified; treat negative values as 0
+  local max_depth = context_depth
+  if max_depth == nil then
+    -- nil means unlimited, but we'll use a reasonable limit to prevent infinite loops
+    max_depth = 10
+  elseif max_depth < 0 then
+    max_depth = 0
+  end
+  
+  -- Default max_files to 100 if not specified
+  local file_limit = max_files or 100
 
   -- Build list of directories to search based on depth
   local search_dirs = { current_dir }
@@ -205,37 +216,74 @@ local function find_potential_main_files(current_file, current_dir, context_dept
     table.insert(search_dirs, parent)
     dir = parent
   end
+  
+  -- Determine file extension and inclusion patterns based on filetype
+  local file_extension, inclusion_patterns
+  if filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
+    file_extension = "%.tex$"
+    inclusion_patterns = {
+      "\\input%s*{([^}]+)}",
+      "\\include%s*{([^}]+)}",
+      "\\subfile%s*{([^}]+)}",
+      "\\subfileinclude%s*{([^}]+)}",
+    }
+  elseif filetype == "typst" then
+    file_extension = "%.typ$"
+    inclusion_patterns = {
+      '#include%s+"([^"]+)"',
+      "#include%s+'([^']+)'",
+    }
+  else
+    -- Unsupported filetype for multi-file projects
+    return {}
+  end
 
   for _, dir in ipairs(search_dirs) do
     local found = vim.fs.find(function(name, _)
-      return name:lower():match("%.tex$") ~= nil
-    end, { path = dir, type = "file", limit = math.huge })
+      return name:lower():match(file_extension) ~= nil
+    end, { path = dir, type = "file", limit = file_limit })
 
-    for _, tex_file in ipairs(found) do
-      if tex_file ~= current_file then
+    for _, main_file in ipairs(found) do
+      if main_file ~= current_file then
         -- Read the file to check if it includes the current file
-        local ok, lines = pcall(vim.fn.readfile, tex_file)
+        local ok, lines = pcall(vim.fn.readfile, main_file)
         if ok and lines then
           local content = table.concat(lines, "\n")
+          
+          -- Remove comments based on filetype
+          if filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
+            -- Remove LaTeX comments
+            content = content:gsub("%%[^\n]*", "")
+          elseif filetype == "typst" then
+            -- Remove Typst single-line comments
+            content = content:gsub("//[^\n]*", "")
+            -- Remove Typst block comments (simplified - doesn't handle nested)
+            content = content:gsub("/%*.-%*/", "")
+          end
+          
           -- Check for various inclusion commands
-          -- \input{file}, \include{file}, \subfile{file}, \subfileinclude{file}
-          local patterns = {
-            "\\input%s*{([^}]+)}",
-            "\\include%s*{([^}]+)}",
-            "\\subfile%s*{([^}]+)}",
-            "\\subfileinclude%s*{([^}]+)}",
-          }
-
-          for _, pattern in ipairs(patterns) do
+          for _, pattern in ipairs(inclusion_patterns) do
             for included_file in content:gmatch(pattern) do
               included_file = vim.trim(included_file)
-              -- Handle .tex extension - LaTeX commands may omit it
-              if not included_file:match("%.tex$") then
-                included_file = included_file .. ".tex"
+              
+              -- Handle file extension - commands may omit it
+              if filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
+                if not included_file:match("%.tex$") then
+                  included_file = included_file .. ".tex"
+                end
+              elseif filetype == "typst" then
+                if not included_file:match("%.typ$") then
+                  included_file = included_file .. ".typ"
+                end
               end
-              local included_basename = vim.fn.fnamemodify(included_file, ":t")
-              if included_basename == current_basename then
-                table.insert(main_files, tex_file)
+              
+              -- Resolve included_file relative to main_file's directory and compare full paths
+              local main_dir = vim.fn.fnamemodify(main_file, ":h")
+              local resolved_path = vim.fs.joinpath(main_dir, included_file)
+              local normalized_path = vim.fs.normalize(resolved_path)
+              
+              if normalized_path == current_file then
+                table.insert(main_files, main_file)
                 break
               end
             end
@@ -370,15 +418,16 @@ end
 ---@param current_dir string
 ---@param filetype string
 ---@param context_depth integer|nil
+---@param max_files integer|nil
 ---@return string[]|nil
-local function inherit_context_from_main_file(current_file, current_dir, filetype, context_depth)
-  -- Only support LaTeX for now
-  if filetype ~= "tex" and filetype ~= "plaintex" and filetype ~= "latex" then
+local function inherit_context_from_main_file(current_file, current_dir, filetype, context_depth, max_files)
+  -- Support LaTeX and Typst multi-file projects
+  if filetype ~= "tex" and filetype ~= "plaintex" and filetype ~= "latex" and filetype ~= "typst" then
     return nil
   end
 
   -- Find potential main files
-  local main_files = find_potential_main_files(current_file, current_dir, context_depth)
+  local main_files = find_potential_main_files(current_file, current_dir, context_depth, max_files, filetype)
 
   -- Try to get context from each main file
   for _, main_file in ipairs(main_files) do
@@ -801,7 +850,8 @@ local function detect_context_files(cfg)
   -- If no files found and context inheritance is enabled, try to inherit from main file
   if #files == 0 and cfg and cfg.context and type(cfg.context) == "table" and cfg.context.inherit ~= false then
     local context_depth = cfg.context.depth or 1
-    local inherited_files = inherit_context_from_main_file(current_file, current_dir, filetype, context_depth)
+    local max_files = cfg.context.max_files or 100
+    local inherited_files = inherit_context_from_main_file(current_file, current_dir, filetype, context_depth, max_files)
     if inherited_files and #inherited_files > 0 then
       return inherited_files
     end

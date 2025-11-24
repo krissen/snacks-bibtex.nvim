@@ -136,7 +136,8 @@ require("snacks-bibtex").setup({
     enabled = false,                --   enable context detection (default: false)
     fallback = true,                --   fall back to project search if no context found (default: true)
     inherit = true,                 --   inherit context from main files in multi-file projects (default: true)
-    depth = 1,                      --   directory depth for searching parent files (default: 1)
+    depth = 1,                      --   directory depth for searching parent files (default: 1, 0=current only, nil=unlimited/not recommended)
+    max_files = 100,                --   max number of files to check per directory when searching for main files (default: 100)
   },
   search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
   match_priority = { "author", "year", "title" }, -- remaining search_fields are appended automatically
@@ -383,7 +384,9 @@ require("snacks-bibtex").bibtex({ context = true })
 
 #### Context inheritance for multi-file projects
 
-When working with multi-file LaTeX projects (or Typst in the future), sub-files often don't explicitly mention the bibliography but depend on a main file that does. For example:
+When working with multi-file LaTeX or Typst projects, sub-files often don't explicitly mention the bibliography but depend on a main file that does. For example:
+
+**LaTeX example:**
 
 **Main file (`main.tex`):**
 ```latex
@@ -405,9 +408,26 @@ When working with multi-file LaTeX projects (or Typst in the future), sub-files 
 Some text with citations \cite{key}.
 ```
 
+**Typst example:**
+
+**Main file (`main.typ`):**
+```typst
+#bibliography("references.bib")
+
+#include "chapters/introduction.typ"
+#include "chapters/methods.typ"
+```
+
+**Sub-file (`chapters/introduction.typ`):**
+```typst
+// No bibliography declaration - depends on main.typ
+= Introduction
+Some text with citations @key.
+```
+
 With `context.inherit = true` (the default), snacks-bibtex will:
-1. First check if the current file has explicit bibliography context (e.g., `\addbibresource{}`)
-2. If not found, search for potential main files that include the current file via `\input{}`, `\include{}`, `\subfile{}`, etc.
+1. First check if the current file has explicit bibliography context (e.g., `\addbibresource{}` or `#bibliography()`)
+2. If not found, search for potential main files that include the current file via `\input{}`, `\include{}`, `\subfile{}`, `#include`, etc.
 3. If a main file is found with bibliography context, inherit those bibliography files
 4. If no inheritance is possible, fall back to `context.fallback` behavior
 
@@ -415,10 +435,11 @@ With `context.inherit = true` (the default), snacks-bibtex will:
 ```lua
 require("snacks-bibtex").setup({
   context = {
-    enabled = true,   -- Enable context awareness
-    inherit = true,   -- Enable context inheritance (default: true)
-    depth = 1,        -- Directory depth for parent search (default: 1)
-    fallback = true,  -- Fall back if no context or inheritance found
+    enabled = true,    -- Enable context awareness
+    inherit = true,    -- Enable context inheritance (default: true)
+    depth = 1,         -- Directory depth for parent search (default: 1, 0=current only, nil=unlimited)
+    max_files = 100,   -- Max files to check per directory (default: 100)
+    fallback = true,   -- Fall back if no context or inheritance found
   },
 })
 
@@ -441,17 +462,28 @@ require("snacks-bibtex").setup({
 })
 ```
 
-**Supported inclusion patterns (LaTeX):**
+**Supported inclusion patterns:**
+
+**LaTeX:**
 - `\input{file}` or `\input{file.tex}`
 - `\include{file}` or `\include{file.tex}`
 - `\subfile{file}` or `\subfile{file.tex}` (subfiles package)
 - `\subfileinclude{file}` (subfiles package)
 
+**Typst:**
+- `#include "file.typ"` or `#include 'file.typ'`
+
 **Notes:**
-- Context inheritance currently supports LaTeX multi-file projects
-- The `context.depth` setting controls how many directory levels up to search for parent files (default: 1)
-- With `context.depth = 1`, searches current directory and parent directory
-- With `context.depth = 2`, searches current, parent, and grandparent directories, etc.
+- Context inheritance supports LaTeX and Typst multi-file projects
+- The `context.depth` setting controls how many directory levels up to search for parent files
+  - `depth = 0`: searches only current directory
+  - `depth = 1`: searches current and parent directory (default)
+  - `depth = 2`: searches current, parent, and grandparent directories
+  - `depth = nil`: unlimited search (not recommended - may impact performance)
+  - Negative values are treated as 0
+- The `context.max_files` setting limits the number of files checked per directory (default: 100)
+  - This prevents performance issues in directories with many files
+  - Increase if you have large projects with many parent files
 - Main file detection is based on finding inclusion commands that reference the current file
 - When context is inherited, `global_files` are still ignored (same as direct context)
 

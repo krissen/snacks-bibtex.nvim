@@ -44,13 +44,14 @@ local defaults ---@type SnacksBibtexConfig
 ---@field enabled boolean|nil Enable context-aware bibliography file detection from current buffer (default: false)
 ---@field fallback boolean|nil When enabled and no context found: true=fall back to project search, false=show no entries (default: true)
 ---@field inherit boolean|nil When enabled and no direct context found: try to inherit from main file in multi-file projects (default: true)
----@field depth integer|nil Directory depth for searching parent files when inheriting context (default: 1)
+---@field depth integer|nil Directory depth for searching parent files when inheriting context (default: 1, 0=current dir only, nil=unlimited, negative treated as 0)
+---@field max_files integer|nil Maximum number of parent .tex files to check per directory when searching for main files (default: 100)
 
 ---@class SnacksBibtexConfig
 ---@field depth integer|nil Directory recursion depth for local bib search
 ---@field files string[]|nil Explicit list of project-local bib files
 ---@field global_files string[]|nil List of global bib files (outside project)
----@field context boolean|SnacksBibtexContextConfig|nil Context-aware bibliography detection. Boolean: true=enable with defaults, false=disable. Table: {enabled: boolean, fallback: boolean, inherit: boolean, depth: integer}
+---@field context boolean|SnacksBibtexContextConfig|nil Context-aware bibliography detection. Boolean: true=enable with defaults, false=disable. Table: {enabled: boolean, fallback: boolean, inherit: boolean, depth: integer, max_files: integer}
 ---@field search_fields string[] Ordered list of fields to search (e.g. {"author","title","year","keywords"})
 ---@field format string Default format for inserting citation keys or labels
 ---@field preview_format string Template used to format the preview line(s)
@@ -345,6 +346,7 @@ local function normalize_context_config(context, old_config)
     fallback = true,
     inherit = true,
     depth = 1,
+    max_files = 100,
   }
   
   -- If context is already a table, merge with defaults
@@ -386,6 +388,7 @@ local function init_defaults()
       fallback = true,
       inherit = true,
       depth = 1,
+      max_files = 100,
     },
     search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
     match_priority = { "author", "year", "title" },
