@@ -40,12 +40,18 @@ local defaults ---@type SnacksBibtexConfig
 ---@field preview_fields string[]|nil Optional list of field names to show in preview (overrides preview_format)
 ---@field preview_fields_separator string Separator between preview fields when preview_fields is used
 
+---@class SnacksBibtexContextConfig
+---@field enabled boolean|nil Enable context-aware bibliography file detection from current buffer (default: false)
+---@field fallback boolean|nil When enabled and no context found: true=fall back to project search, false=show no entries (default: true)
+---@field inherit boolean|nil When enabled and no direct context found: try to inherit from main file in multi-file projects (default: true)
+---@field depth integer|nil Directory depth for searching parent files when inheriting context (default: 1, 0=current dir only, nil=unlimited, negative treated as 0)
+---@field max_files integer|nil Maximum number of parent files to check per directory when searching for main files (default: 100)
+
 ---@class SnacksBibtexConfig
 ---@field depth integer|nil Directory recursion depth for local bib search
 ---@field files string[]|nil Explicit list of project-local bib files
 ---@field global_files string[]|nil List of global bib files (outside project)
----@field context boolean|nil Enable context-aware bibliography file detection from current buffer (default: false)
----@field context_fallback boolean|nil When context=true and no context found: true=fall back to project search, false=show no entries (default: true)
+---@field context boolean|SnacksBibtexContextConfig|nil Context-aware bibliography detection. Boolean: true=enable with defaults, false=disable. Table: {enabled: boolean, fallback: boolean, inherit: boolean, depth: integer, max_files: integer}
 ---@field search_fields string[] Ordered list of fields to search (e.g. {"author","title","year","keywords"})
 ---@field format string Default format for inserting citation keys or labels
 ---@field preview_format string Template used to format the preview line(s)
@@ -328,14 +334,62 @@ local function apply_match_priority(cfg)
   cfg._match_priority = normalize_match_priority(cfg.match_priority, cfg.search_fields)
 end
 
+---Normalize context configuration to always use the new hierarchical format
+---Handles backward compatibility with the old flat config (context, context_fallback, etc.)
+---@param context any The context configuration value
+---@param old_config table|nil The full config table for backward compatibility lookups
+---@return SnacksBibtexContextConfig
+local function normalize_context_config(context, old_config)
+  -- Default values
+  local defaults_ctx = {
+    enabled = false,
+    fallback = true,
+    inherit = true,
+    depth = 1,
+    max_files = 100,
+  }
+  
+  -- If context is already a table, merge with defaults
+  if type(context) == "table" then
+    return vim.tbl_extend("keep", context, defaults_ctx)
+  end
+  
+  -- Backward compatibility: if context is a boolean, check for old flat config
+  local result = vim.deepcopy(defaults_ctx)
+  
+  if type(context) == "boolean" then
+    result.enabled = context
+  end
+  
+  -- Check for old flat config keys for backward compatibility
+  if old_config then
+    if old_config.context_fallback ~= nil then
+      result.fallback = old_config.context_fallback
+    end
+    if old_config.context_inherit ~= nil then
+      result.inherit = old_config.context_inherit
+    end
+    if old_config.context_depth ~= nil then
+      result.depth = old_config.context_depth
+    end
+  end
+  
+  return result
+end
+
 ---@return SnacksBibtexConfig
 local function init_defaults()
   defaults = {
     depth = 1,
     files = nil,
     global_files = {},
-    context = false,
-    context_fallback = true,
+    context = {
+      enabled = false,
+      fallback = true,
+      inherit = true,
+      depth = 1,
+      max_files = 100,
+    },
     search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
     match_priority = { "author", "year", "title" },
     format = "%s",
@@ -1045,6 +1099,7 @@ function M.setup(opts)
   merged.files = normalize_files(merged.files)
   merged.global_files = normalize_files(merged.global_files) or {}
   merged.display = normalize_display(merged.display)
+  merged.context = normalize_context_config(merged.context, opts)
   normalize_citation_commands(merged.citation_commands)
   normalize_citation_formats(merged.citation_formats)
   merged.sort = normalize_sort(merged.sort)
@@ -1070,6 +1125,7 @@ function M.resolve(opts)
   merged.global_files = normalize_files(merged.global_files) or merged.global_files
   merged.global_files = merged.global_files or {}
   merged.display = normalize_display(merged.display)
+  merged.context = normalize_context_config(merged.context, opts)
   normalize_citation_commands(merged.citation_commands)
   normalize_citation_formats(merged.citation_formats)
   merged.sort = normalize_sort(merged.sort)

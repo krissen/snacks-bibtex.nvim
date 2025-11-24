@@ -132,8 +132,13 @@ require("snacks-bibtex").setup({
   depth = 1,                        -- recursion depth for project search (nil for unlimited)
   files = nil,                      -- explicit list of project-local bib files (supports ~ / $ENV expansion)
   global_files = {},                -- list of additional bib files (supports ~ / $ENV expansion)
-  context = false,                  -- enable context-aware bibliography file detection
-  context_fallback = true,          -- when context=true and no context found: true=fall back to project search, false=show no entries
+  context = {                       -- context-aware bibliography file detection
+    enabled = false,                --   enable context detection (default: false)
+    fallback = true,                --   fall back to project search if no context found (default: true)
+    inherit = true,                 --   inherit context from main files in multi-file projects (default: true)
+    depth = 1,                      --   directory depth for searching parent files (default: 1, 0=current only, nil=unlimited/not recommended)
+    max_files = 100,                --   max number of files to check per directory when searching for main files (default: 100)
+  },
   search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
   match_priority = { "author", "year", "title" }, -- remaining search_fields are appended automatically
   format = "%s",                    -- how keys are inserted with <CR>
@@ -254,15 +259,15 @@ display = {
 
 ### Context-aware bibliography file detection
 
-When `context = true`, snacks-bibtex looks for context lines in your currently opened file that specify which bibliography file(s) to use. This is particularly useful for multi-project workflows where different documents reference different bibliography files. By default, `context = false`, meaning the plugin will always search your project directory for `.bib` files and include `global_files`.
+When `context.enabled = true`, snacks-bibtex looks for context lines in your currently opened file that specify which bibliography file(s) to use. This is particularly useful for multi-project workflows where different documents reference different bibliography files. By default, `context.enabled = false`, meaning the plugin will always search your project directory for `.bib` files and include `global_files`.
 
 **How it works:**
 - When context is detected (e.g., `bibliography:` in YAML frontmatter or `\addbibresource{}` in LaTeX), **only** those files are used
 - Both `global_files` and the normal project directory search are ignored when context is found
-- If no context is detected and `context_fallback = true` (the default), the plugin falls back to searching your project directory
-- If no context is detected and `context_fallback = false`, no entries will be shown
+- If no context is detected and `context.fallback = true` (the default), the plugin falls back to searching your project directory
+- If no context is detected and `context.fallback = false`, no entries will be shown
 
-**When to use `context_fallback = false`:**
+**When to use `context.fallback = false`:**
 - You want strict mode: only show citations when the document explicitly declares its bibliography
 - You're working in a repository with multiple unrelated documents and want to avoid accidentally citing from the wrong bibliography
 - You want to enforce that all documents must declare their bibliography sources
@@ -325,43 +330,162 @@ Where `refs.typ` contains:
 **Configuration example:**
 ```lua
 require("snacks-bibtex").setup({
-  context = true,           -- Enable context awareness (default: false)
-  context_fallback = true,  -- Fall back to project search if no context found (default)
+  context = {
+    enabled = true,   -- Enable context awareness (default: false)
+    fallback = true,  -- Fall back to project search if no context found (default: true)
+  },
 })
 
 -- For strict mode (only show citations when document declares bibliography):
 require("snacks-bibtex").setup({
-  context = true,
-  context_fallback = false,  -- No fallback: require explicit bibliography declaration
+  context = {
+    enabled = true,
+    fallback = false,  -- No fallback: require explicit bibliography declaration
+  },
 })
 
 -- Default behavior (always search project):
 require("snacks-bibtex").setup({
-  context = false,  -- Always use project directory search (default)
+  context = {
+    enabled = false,  -- Always use project directory search (default)
+  },
+})
+
+-- Backward compatible: boolean still works
+require("snacks-bibtex").setup({
+  context = true,  -- Equivalent to { enabled = true, fallback = true, inherit = true, depth = 1 }
 })
 ```
 
 **Per-invocation context control:**
 ```lua
 -- Enable context for this call only
-require("snacks-bibtex").bibtex({ context = true })
+require("snacks-bibtex").bibtex({ context = { enabled = true } })
 
 -- Disable context for this call
-require("snacks-bibtex").bibtex({ context = false })
+require("snacks-bibtex").bibtex({ context = { enabled = false } })
 
 -- Strict mode for this call (no fallback)
-require("snacks-bibtex").bibtex({ context = true, context_fallback = false })
+require("snacks-bibtex").bibtex({ context = { enabled = true, fallback = false } })
+
+-- Backward compatible: boolean still works
+require("snacks-bibtex").bibtex({ context = true })
 ```
 
 **Summary of behavior:**
 
-| `context` | `context_fallback` | Context found? | Result |
-|-----------|-------------------|----------------|--------|
+| `context.enabled` | `context.fallback` | Context found? | Result |
+|-------------------|-------------------|----------------|--------|
 | `true` | `true` | Yes | Use context files only |
 | `true` | `true` | No | Fall back to project search + `global_files` |
 | `true` | `false` | Yes | Use context files only |
 | `true` | `false` | No | Show no entries |
 | `false` | any | any | Always use project search + `global_files` (context is ignored) |
+
+#### Context inheritance for multi-file projects
+
+When working with multi-file LaTeX or Typst projects, sub-files often don't explicitly mention the bibliography but depend on a main file that does. For example:
+
+**LaTeX example:**
+
+**Main file (`main.tex`):**
+```latex
+\documentclass{article}
+\usepackage{biblatex}
+\addbibresource{references.bib}
+
+\input{chapters/introduction}
+\input{chapters/methods}
+
+\printbibliography
+\end{document}
+```
+
+**Sub-file (`chapters/introduction.tex`):**
+```latex
+% No \addbibresource here - depends on main.tex preamble
+\section{Introduction}
+Some text with citations \cite{key}.
+```
+
+**Typst example:**
+
+**Main file (`main.typ`):**
+```typst
+#bibliography("references.bib")
+
+#include "chapters/introduction.typ"
+#include "chapters/methods.typ"
+```
+
+**Sub-file (`chapters/introduction.typ`):**
+```typst
+// No bibliography declaration - depends on main.typ
+= Introduction
+Some text with citations @key.
+```
+
+With `context.inherit = true` (the default), snacks-bibtex will:
+1. First check if the current file has explicit bibliography context (e.g., `\addbibresource{}` or `#bibliography()`)
+2. If not found, search for potential main files that include the current file via `\input{}`, `\include{}`, `\subfile{}`, `#include`, etc.
+3. If a main file is found with bibliography context, inherit those bibliography files
+4. If no inheritance is possible, fall back to `context.fallback` behavior
+
+**Configuration:**
+```lua
+require("snacks-bibtex").setup({
+  context = {
+    enabled = true,    -- Enable context awareness
+    inherit = true,    -- Enable context inheritance (default: true)
+    depth = 1,         -- Directory depth for parent search (default: 1, 0=current only, nil=unlimited)
+    max_files = 100,   -- Max files to check per directory (default: 100)
+    fallback = true,   -- Fall back if no context or inheritance found
+  },
+})
+
+-- Disable context inheritance (strict: only direct context):
+require("snacks-bibtex").setup({
+  context = {
+    enabled = true,
+    inherit = false,  -- Sub-files must have their own context
+    fallback = false,
+  },
+})
+
+-- Search deeper for parent files (e.g., deeply nested sub-files):
+require("snacks-bibtex").setup({
+  context = {
+    enabled = true,
+    inherit = true,
+    depth = 2,        -- Search up to 2 directory levels for parent files
+  },
+})
+```
+
+**Supported inclusion patterns:**
+
+**LaTeX:**
+- `\input{file}` or `\input{file.tex}`
+- `\include{file}` or `\include{file.tex}`
+- `\subfile{file}` or `\subfile{file.tex}` (subfiles package)
+- `\subfileinclude{file}` (subfiles package)
+
+**Typst:**
+- `#include "file.typ"` or `#include 'file.typ'`
+
+**Notes:**
+- Context inheritance supports LaTeX and Typst multi-file projects
+- The `context.depth` setting controls how many directory levels up to search for parent files
+  - `depth = 0`: searches only current directory
+  - `depth = 1`: searches current and parent directory (default)
+  - `depth = 2`: searches current, parent, and grandparent directories
+  - `depth = nil`: unlimited search (not recommended - may impact performance)
+  - Negative values are treated as 0
+- The `context.max_files` setting limits the number of files checked per directory (default: 100)
+  - This prevents performance issues in directories with many files
+  - Increase if you have large projects with many parent files
+- Main file detection is based on finding inclusion commands that reference the current file
+- When context is inherited, `global_files` are still ignored (same as direct context)
 
 ### Sorting and frecency
 
