@@ -424,9 +424,8 @@ local function detect_context_files(cfg)
       return
     end
 
-    -- Expand user paths and environment variables
-    -- Support both $VAR and ${VAR} formats, with underscores in variable names
-    if file_path:match("^~") or file_path:match("%$[%w_]+") or file_path:match("%${[%w_]+}") then
+    -- Expand user paths and environment variables (vim.fn.expand handles ~, $VAR, ${VAR})
+    if file_path:match("^~") or file_path:match("%$") then
       local ok, expanded = pcall(vim.fn.expand, file_path)
       if ok and type(expanded) == "string" and expanded ~= "" then
         file_path = expanded
@@ -434,7 +433,6 @@ local function detect_context_files(cfg)
     end
 
     -- Resolve relative paths
-    -- Check if path is already absolute (Unix: starts with /, Windows: has drive letter)
     if not is_absolute_path(file_path) then
       file_path = vim.fs.joinpath(current_dir, file_path)
     end
