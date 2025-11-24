@@ -225,7 +225,6 @@ end
 ---@return string[]
 local function find_potential_main_files(current_file, current_dir, context_depth, max_files, filetype)
   local main_files = {}
-  local current_basename = vim.fn.fnamemodify(current_file, ":t")
   
   -- Maximum depth when nil is specified to prevent infinite loops or excessive searches.
   -- Limited to 10 levels as most project structures don't exceed this depth,
