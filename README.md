@@ -107,8 +107,9 @@ Default actions inside the picker:
 
 Key | Action
 ----|-------
-`<CR>` | Insert the citation key (formatted with `config.format`, default `%s`).
-`<C-e>` | Insert the full BibTeX entry at the cursor.
+`<CR>` | Insert the citation key (formatted with `config.format`, default `%s`). When launched from a `.bib` file with `bib_file_insert = "entry"`, inserts the full BibTeX entry instead.
+`<C-e>` | Insert the full BibTeX entry at the cursor (with duplicate warnings when in a `.bib` file).
+`<C-k>` | Insert the citation key only (ignores `bib_file_insert` setting).
 `<C-a>` | Insert `\cite{<key>}` (generic BibTeX/BibLaTeX citation).
 `<C-p>` | Insert `\citep{<key>}` (natbib parenthetical citation).
 `<C-t>` | Insert `\citet{<key>}` (natbib textual citation).
@@ -170,6 +171,9 @@ require("snacks-bibtex").setup({
   },
   match_sort = nil,                 -- optional: overrides search-time ordering (defaults to score + `match_priority` + `sort`)
   locale = "en",                    -- preferred locale for textual formats
+  bib_file_insert = "entry",        -- what to insert when picker is opened from a .bib file ("entry" or "key")
+  warn_on_duplicate_key = true,     -- warn when inserting an entry whose key already exists (in .bib files)
+  warn_on_duplicate_entry = true,   -- warn when inserting an exact duplicate entry (in .bib files)
   citation_commands = {             -- toggle citation templates or add your own
     -- each entry: { command, template, description?, packages?, enabled? }
   },
@@ -535,7 +539,42 @@ If the stored history file contains timestamps that appear to come from the futu
 
 The parser keeps track of brace balance with a net counter and honors escaped quotes, allowing it to process nested fields and
 quoted values reliably. Author/editor names are split only on the literal lowercase ` and ` separator at brace depth zero, so
-capitalized words that contain “And” stay intact while still following BibTeX’s requirements.
+capitalized words that contain "And" stay intact while still following BibTeX's requirements.
+
+### BibTeX file insertion behavior
+
+When you open the picker from a `.bib` file, snacks-bibtex changes its default behavior to help you copy entries between bibliography files:
+
+- **`bib_file_insert = "entry"`** (default): `<CR>` inserts the full BibTeX entry instead of just the key
+- **`bib_file_insert = "key"`**: `<CR>` always inserts the key, even in `.bib` files
+
+Regardless of this setting, you can always use:
+- `<C-e>` to insert the full entry (with duplicate warnings)
+- `<C-k>` to insert just the key
+
+**Duplicate detection:**
+
+When inserting entries into a `.bib` file, snacks-bibtex warns you about potential duplicates:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `warn_on_duplicate_entry` | `true` | Warn when the exact entry text already exists |
+| `warn_on_duplicate_key` | `true` | Warn when the citation key already exists (different entry) |
+
+Warnings are shown via `vim.notify` but insertion proceeds anyway—resolving duplicates is the user's responsibility.
+
+```lua
+-- Disable duplicate warnings
+require("snacks-bibtex").setup({
+  warn_on_duplicate_key = false,
+  warn_on_duplicate_entry = false,
+})
+
+-- Always insert keys, even from .bib files
+require("snacks-bibtex").setup({
+  bib_file_insert = "key",
+})
+```
 
 ## 📋 Citation Commands
 
