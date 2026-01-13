@@ -407,15 +407,14 @@ local function field_value(entry, name)
   elseif values and (type(values[lowered]) == "string" or type(values[lowered]) == "number") then
     return tostring(values[lowered])
   end
-  local name = lowered
-  if name == "key" then
+  if lowered == "key" then
     return entry.key or ""
-  elseif name == "type" then
+  elseif lowered == "type" then
     return entry.type or ""
-  elseif name == "file" then
+  elseif lowered == "file" then
     return entry.file or ""
   end
-  return entry.fields[name] or ""
+  return entry.fields[lowered] or ""
 end
 
 ---Format a template using entry metadata, supporting triple braces to wrap values in `{}` automatically.
