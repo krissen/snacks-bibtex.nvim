@@ -1947,8 +1947,9 @@ end
 ---Searches for matching key lines first, then compares a bounded window around each match.
 ---@param picker snacks.Picker
 ---@param raw string The raw BibTeX entry text
+---@param cfg SnacksBibtexResolvedConfig
 ---@return boolean true if the entry content already exists in the buffer
-local function entry_exists_in_buffer(picker, raw)
+local function entry_exists_in_buffer(picker, raw, cfg)
   if not raw or raw == "" then
     return false
   end
@@ -1965,15 +1966,21 @@ local function entry_exists_in_buffer(picker, raw)
   local buf = vim.api.nvim_win_get_buf(win)
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   local key_pattern = "@%w+%s*{%s*" .. vim.pesc(key_match) .. "%s*,"
-  local normalized_raw = normalize_whitespace(raw)
   local raw_line_count = select(2, raw:gsub("\n", "\n")) + 1
   local window_size = math.max(raw_line_count + 10, 50)
+
+  local normalization_mode = cfg.duplicate_normalization_mode or "whitespace"
+  local normalize = normalization_mode == "whitespace" and normalize_whitespace or function(s)
+    return s
+  end
+  local normalized_raw = normalize(raw)
 
   for i, line in ipairs(lines) do
     if line:match(key_pattern) then
       local end_idx = math.min(i + window_size - 1, #lines)
       local window_text = table.concat(lines, "\n", i, end_idx)
-      if window_text:find(normalized_raw, 1, true) then
+      local normalized_window = normalize(window_text)
+      if normalized_window:find(normalized_raw, 1, true) then
         return true
       end
     end
@@ -2003,7 +2010,7 @@ local function make_actions(snacks, cfg)
       local warn_key = cfg.warn_on_duplicate_key ~= false
 
       if warn_entry or warn_key then
-        local duplicate_entry = warn_entry and entry_exists_in_buffer(picker, item.raw)
+        local duplicate_entry = warn_entry and entry_exists_in_buffer(picker, item.raw, cfg)
         local duplicate_key = warn_key and not duplicate_entry and key_exists_in_buffer(picker, item.key)
 
         if duplicate_entry then
@@ -2027,7 +2034,6 @@ local function make_actions(snacks, cfg)
       return
     end
 
-    -- Default behavior: insert the key
     local text = item.key
     if cfg.format and cfg.format ~= "" then
       local ok, formatted = pcall(string.format, cfg.format, item.key)
@@ -2043,7 +2049,6 @@ local function make_actions(snacks, cfg)
   actions.insert_key = insert_key_action
   actions.confirm = insert_key_action
 
-  ---Open the selected entry's source file in the window where the picker was launched.
   actions.open_entry = function(picker, item)
     if not item then
       return
@@ -2093,7 +2098,7 @@ local function make_actions(snacks, cfg)
     local in_bib_file = picker._snacks_bibtex_origin_filetype == "bib"
 
     if in_bib_file and (warn_entry or warn_key) then
-      local duplicate_entry = warn_entry and entry_exists_in_buffer(picker, item.raw)
+      local duplicate_entry = warn_entry and entry_exists_in_buffer(picker, item.raw, cfg)
       local duplicate_key = warn_key and not duplicate_entry and key_exists_in_buffer(picker, item.key)
 
       if duplicate_entry then
