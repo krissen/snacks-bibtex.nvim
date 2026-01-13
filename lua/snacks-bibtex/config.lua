@@ -72,6 +72,8 @@ local defaults ---@type SnacksBibtexConfig
 ---@field warn_on_duplicate_entry? boolean Warn when inserting an exact duplicate entry in the buffer (default: true)
 ---@field parser_unescape_basic? boolean Unescape \" and \\ in quoted strings during parsing (default: true)
 ---@field duplicate_normalization_mode? "none"|"whitespace" How to normalize entry text when checking for duplicates (default: "whitespace")
+---@field default_insert_mode? "key"|"format" Default insertion mode for <CR> outside .bib files (default: "key")
+---@field insert_mode_by_filetype? table<string, "key"|"format"|"entry"> Per-filetype overrides for insertion mode (e.g. { markdown = "format", tex = "key" })
 
 local function deepcopy(tbl)
   return vim.deepcopy(tbl)
@@ -433,6 +435,8 @@ local function init_defaults()
     warn_on_duplicate_entry = true,
     parser_unescape_basic = true,
     duplicate_normalization_mode = "whitespace",
+    default_insert_mode = "key",
+    insert_mode_by_filetype = {},
     citation_commands = {
       -- LaTeX / BibTeX
       {
