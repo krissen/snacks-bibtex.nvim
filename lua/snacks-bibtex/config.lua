@@ -70,6 +70,8 @@ local defaults ---@type SnacksBibtexConfig
 ---@field bib_file_insert? "entry"|"key" What to insert when picker is opened from a .bib file (default: "entry" for full BibTeX entry)
 ---@field warn_on_duplicate_key? boolean Warn when inserting an entry whose key already exists in the buffer (default: true)
 ---@field warn_on_duplicate_entry? boolean Warn when inserting an exact duplicate entry in the buffer (default: true)
+---@field parser_unescape_basic? boolean Unescape \" and \\ in quoted strings during parsing (default: true)
+---@field duplicate_normalization_mode? "none"|"whitespace" How to normalize entry text when checking for duplicates (default: "whitespace")
 
 local function deepcopy(tbl)
   return vim.deepcopy(tbl)
@@ -429,6 +431,8 @@ local function init_defaults()
     bib_file_insert = "entry",
     warn_on_duplicate_key = true,
     warn_on_duplicate_entry = true,
+    parser_unescape_basic = true,
+    duplicate_normalization_mode = "whitespace",
     citation_commands = {
       -- LaTeX / BibTeX
       {
