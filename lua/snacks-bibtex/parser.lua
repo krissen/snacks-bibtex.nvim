@@ -112,9 +112,18 @@ local function parse_value(body, idx)
     local j = idx + 1
     while j <= len do
       local ch = body:sub(j, j)
-      local prev = j > 1 and body:sub(j - 1, j - 1) or nil
-      if ch == '"' and prev ~= "\\" then
-        break
+      if ch == '"' then
+        -- Count preceding backslashes to handle \" vs \\"
+        local num_backslashes = 0
+        local k = j - 1
+        while k >= 1 and body:sub(k, k) == "\\" do
+          num_backslashes = num_backslashes + 1
+          k = k - 1
+        end
+        -- Quote is escaped only if odd number of backslashes precede it
+        if num_backslashes % 2 == 0 then
+          break
+        end
       end
       j = j + 1
     end
