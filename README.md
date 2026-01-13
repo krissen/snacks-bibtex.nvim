@@ -9,7 +9,7 @@ Scan local and global `*.bib` files, preview entries, and insert citation keys o
 - 📖 **Flexible BibTeX integration** – Finds entries from project-local and global libraries
 - 🎯 **Context awareness** – Auto-detect bibliography files from YAML frontmatter, LaTeX preambles, or Typst documents
 - 🔍 **Smart search** – Configurable fields (author, title, year, …) with LaTeX accent awareness
-- 📝 **Multiple insertion modes** – Citation keys, formatted references, full entries, or individual fields
+- 📝 **Multiple insertion modes** – Citation keys, formatted references, full entries, individual fields, or insert raw `bib`-entries
 - 🎯 **Rich previews** – See BibTeX source and formatted output before inserting
 - ⚡ **Quick shortcuts** – Pre-configured for `\cite`, `\citep`, `\citet`, `@key`, and common citation formats
 - 🎨 **Citation styles** – APA 7, Harvard, Oxford templates with live preview
@@ -35,8 +35,9 @@ This plugin complements existing tools by providing a universal, on-demand inter
 ## 🔗 Related Projects
 
 ### [telescope-bibtex.nvim](https://github.com/nvim-telescope/telescope-bibtex.nvim)
+
 - **Similarities**: Both provide fuzzy-finding over BibTeX entries using their respective picker frameworks (Telescope vs Snacks)
-- **Key differences**: 
+- **Key differences**:
   - snacks-bibtex leverages snacks.nvim's picker infrastructure and follows its conventions
   - Built-in citation format templates (APA, Harvard, Oxford) with live preview
   - Frecency tracking for frequently-used entries
@@ -46,11 +47,13 @@ This plugin complements existing tools by providing a universal, on-demand inter
 - **Choose snacks-bibtex if**: You're using snacks.nvim or want advanced formatting features
 
 ### [cmp-bibtex](https://github.com/crispgm/cmp-bibtex)
+
 - **Purpose**: Completion source for nvim-cmp
 - **Complementary use**: cmp-bibtex for inline completion while typing, snacks-bibtex for manual invocation and format browsing
 - **Key difference**: cmp-bibtex is completion-driven; snacks-bibtex is command/picker-driven
 
 ### [vimtex](https://github.com/lervag/vimtex)
+
 - **Purpose**: Comprehensive LaTeX editing environment
 - **Integration**: Works alongside vimtex for enhanced citation workflow
 - **Key difference**: vimtex focuses on complete LaTeX support; snacks-bibtex specializes in BibTeX citation insertion across file types
@@ -93,6 +96,7 @@ This plugin complements existing tools by providing a universal, on-demand inter
 ### Other plugin managers
 
 For [vim-plug](https://github.com/junegunn/vim-plug), [packer.nvim](https://github.com/wbthomason/packer.nvim), or manual installation, ensure:
+
 1. [folke/snacks.nvim](https://github.com/folke/snacks.nvim) is installed with `picker` module enabled
 2. Clone or install `snacks-bibtex.nvim`
 3. Call `require("snacks-bibtex").setup(opts)` in your config
@@ -266,12 +270,14 @@ display = {
 When `context.enabled = true`, snacks-bibtex looks for context lines in your currently opened file that specify which bibliography file(s) to use. This is particularly useful for multi-project workflows where different documents reference different bibliography files. By default, `context.enabled = false`, meaning the plugin will always search your project directory for `.bib` files and include `global_files`.
 
 **How it works:**
+
 - When context is detected (e.g., `bibliography:` in YAML frontmatter or `\addbibresource{}` in LaTeX), **only** those files are used
 - Both `global_files` and the normal project directory search are ignored when context is found
 - If no context is detected and `context.fallback = true` (the default), the plugin falls back to searching your project directory
 - If no context is detected and `context.fallback = false`, no entries will be shown
 
 **When to use `context.fallback = false`:**
+
 - You want strict mode: only show citations when the document explicitly declares its bibliography
 - You're working in a repository with multiple unrelated documents and want to avoid accidentally citing from the wrong bibliography
 - You want to enforce that all documents must declare their bibliography sources
@@ -287,6 +293,7 @@ When `context.enabled = true`, snacks-bibtex looks for context lines in your cur
 | `typst` | `#import "file.typ": refs` | Detects bibliography from imported `.typ` files (supports `#let refs = bibliography("file")`) |
 
 **Example Markdown file with context:**
+
 ```markdown
 ---
 title: My Paper
@@ -298,6 +305,7 @@ Citations go here [@key].
 ```
 
 **Example LaTeX file with context:**
+
 ```latex
 \documentclass{article}
 \usepackage{biblatex}
@@ -308,6 +316,7 @@ Citations go here \cite{key}.
 ```
 
 **Example Typst file with context:**
+
 ```typst
 #bibliography("references.bib")
 
@@ -316,6 +325,7 @@ Citations go here @key.
 ```
 
 **Example Typst file with imported references:**
+
 ```typst
 #import "refs.typ": refs
 
@@ -327,11 +337,13 @@ Citations: @berger1967 and @hjarpe2019.
 ```
 
 Where `refs.typ` contains:
+
 ```typst
 #let refs = bibliography("refs.bib")
 ```
 
 **Configuration example:**
+
 ```lua
 require("snacks-bibtex").setup({
   context = {
@@ -362,6 +374,7 @@ require("snacks-bibtex").setup({
 ```
 
 **Per-invocation context control:**
+
 ```lua
 -- Enable context for this call only
 require("snacks-bibtex").bibtex({ context = { enabled = true } })
@@ -393,6 +406,7 @@ When working with multi-file LaTeX or Typst projects, sub-files often don't expl
 **LaTeX example:**
 
 **Main file (`main.tex`):**
+
 ```latex
 \documentclass{article}
 \usepackage{biblatex}
@@ -406,6 +420,7 @@ When working with multi-file LaTeX or Typst projects, sub-files often don't expl
 ```
 
 **Sub-file (`chapters/introduction.tex`):**
+
 ```latex
 % No \addbibresource here - depends on main.tex preamble
 \section{Introduction}
@@ -415,6 +430,7 @@ Some text with citations \cite{key}.
 **Typst example:**
 
 **Main file (`main.typ`):**
+
 ```typst
 #bibliography("references.bib")
 
@@ -423,6 +439,7 @@ Some text with citations \cite{key}.
 ```
 
 **Sub-file (`chapters/introduction.typ`):**
+
 ```typst
 // No bibliography declaration - depends on main.typ
 = Introduction
@@ -430,12 +447,14 @@ Some text with citations @key.
 ```
 
 With `context.inherit = true` (the default), snacks-bibtex will:
+
 1. First check if the current file has explicit bibliography context (e.g., `\addbibresource{}` or `#bibliography()`)
 2. If not found, search for potential main files that include the current file via `\input{}`, `\include{}`, `\subfile{}`, `#include`, etc.
 3. If a main file is found with bibliography context, inherit those bibliography files
 4. If no inheritance is possible, fall back to `context.fallback` behavior
 
 **Configuration:**
+
 ```lua
 require("snacks-bibtex").setup({
   context = {
@@ -469,15 +488,18 @@ require("snacks-bibtex").setup({
 **Supported inclusion patterns:**
 
 **LaTeX:**
+
 - `\input{file}` or `\input{file.tex}`
 - `\include{file}` or `\include{file.tex}`
 - `\subfile{file}` or `\subfile{file.tex}` (subfiles package)
 - `\subfileinclude{file}` (subfiles package)
 
 **Typst:**
+
 - `#include "file.typ"` or `#include 'file.typ'`
 
 **Notes:**
+
 - Context inheritance supports LaTeX and Typst multi-file projects
 - The `context.depth` setting controls how many directory levels up to search for parent files
   - `depth = 0`: searches only current directory
@@ -549,6 +571,7 @@ When you open the picker from a `.bib` file, snacks-bibtex changes its default b
 - **`bib_file_insert = "key"`**: `<CR>` always inserts the key, even in `.bib` files
 
 Regardless of this setting, you can always use:
+
 - `<C-e>` to insert the full entry (with duplicate warnings)
 - `<C-k>` to insert just the key
 
