@@ -112,7 +112,7 @@ Default actions inside the picker:
 Key | Action
 ----|-------
 `<CR>` | Insert the citation key (formatted with `config.format`, default `%s`). When launched from a `.bib` file with `bib_file_insert = "entry"`, inserts the full BibTeX entry instead.
-`<C-e>` | Insert the full BibTeX entry at the cursor (with duplicate warnings when in a `.bib` file).
+`<C-e>` | Insert the full BibTeX entry at the cursor (with buffer-only duplicate warnings when in a `.bib` file).
 `<C-k>` | Insert the citation key only (ignores `bib_file_insert` setting).
 `<C-a>` | Insert `\cite{<key>}` (generic BibTeX/BibLaTeX citation).
 `<C-p>` | Insert `\citep{<key>}` (natbib parenthetical citation).
@@ -176,8 +176,8 @@ require("snacks-bibtex").setup({
   match_sort = nil,                 -- optional: overrides search-time ordering (defaults to score + `match_priority` + `sort`)
   locale = "en",                    -- preferred locale for textual formats
   bib_file_insert = "entry",        -- what to insert when picker is opened from a .bib file ("entry" or "key")
-  warn_on_duplicate_key = true,     -- warn when inserting an entry whose key already exists (in .bib files)
-  warn_on_duplicate_entry = true,   -- warn when inserting an exact duplicate entry (in .bib files)
+  warn_on_duplicate_key = true,     -- buffer-only: warn if the key already exists in the target .bib file
+  warn_on_duplicate_entry = true,   -- buffer-only: warn if the exact entry already exists in the target .bib file
   parser_unescape_basic = true,     -- unescape \" and \\ in quoted strings during parsing (default: true)
   duplicate_normalization_mode = "whitespace", -- how to normalize entry text for duplicate detection ("none" or "whitespace")
   default_insert_mode = "key",      -- default insertion mode for <CR> outside .bib files ("key" or "format")
@@ -606,6 +606,8 @@ The `duplicate_normalization_mode` setting controls how entry text is compared:
 - `"none"`: Compare raw text exactly. Only entries with identical formatting are flagged as duplicates.
 
 Warnings are shown via `vim.notify` but insertion proceeds anyway—resolving duplicates is the user's responsibility.
+
+**Note on scope:** Duplicate checks are buffer-only. When inserting into a `.bib` file, snacks-bibtex only checks the target file you are writing to. It does not cross-check other `.bib` files in your project (including files listed in `files`/`global_files` or detected via `context`). This keeps insertion fast and avoids noisy warnings for intentionally duplicated libraries (e.g., a master library plus a project-local one).
 
 ```lua
 -- Disable duplicate warnings
