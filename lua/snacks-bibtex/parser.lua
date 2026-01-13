@@ -2,6 +2,16 @@ local uv = vim.uv or vim.loop
 
 local M = {}
 
+local function unescape_basic_quoted(s)
+  if type(s) ~= "string" or s == "" then
+    return s
+  end
+  s = s:gsub("\\\\", "\1")
+  s = s:gsub('\\"', '"')
+  s = s:gsub("\1", "\\")
+  return s
+end
+
 ---@class SnacksBibtexEntry
 ---@field key string
 ---@field type string
@@ -81,8 +91,9 @@ end
 
 ---@param body string
 ---@param idx integer
+---@param unescape boolean|nil
 ---@return string, integer
-local function parse_value(body, idx)
+local function parse_value(body, idx, unescape)
   local len = #body
   while idx <= len and body:sub(idx, idx):match("%s") do
     idx = idx + 1
@@ -113,14 +124,12 @@ local function parse_value(body, idx)
     while j <= len do
       local ch = body:sub(j, j)
       if ch == '"' then
-        -- Count preceding backslashes to handle \" vs \\"
         local num_backslashes = 0
         local k = j - 1
         while k >= 1 and body:sub(k, k) == "\\" do
           num_backslashes = num_backslashes + 1
           k = k - 1
         end
-        -- Quote is escaped only if odd number of backslashes precede it
         if num_backslashes % 2 == 0 then
           break
         end
@@ -128,6 +137,9 @@ local function parse_value(body, idx)
       j = j + 1
     end
     local value = body:sub(idx + 1, j - 1)
+    if unescape then
+      value = unescape_basic_quoted(value)
+    end
     return vim.trim(value), j + 1
   else
     local s, e = body:find("[^,%}]+", idx)
@@ -139,7 +151,7 @@ local function parse_value(body, idx)
   end
 end
 
-local function parse_fields(body)
+local function parse_fields(body, unescape)
   local fields = {}
   local idx = 1
   local len = #body
@@ -150,7 +162,7 @@ local function parse_fields(body)
     end
     idx = next_idx + 1
     local value
-    value, idx = parse_value(body, idx)
+    value, idx = parse_value(body, idx, unescape)
     if value ~= "" then
       fields[name:lower()] = value
     end
@@ -163,8 +175,9 @@ end
 
 ---@param text string
 ---@param path string
+---@param unescape boolean|nil
 ---@return SnacksBibtexEntry[]
-local function parse_entries(text, path)
+local function parse_entries(text, path, unescape)
   local entries = {}
   local lines = vim.split(text, "\n", { plain = true })
   local current
@@ -204,7 +217,7 @@ local function parse_entries(text, path)
           if inner then
             inner = inner:sub(2, -2)
             inner = inner:gsub("^%s*[^,%s]+%s*,", "", 1)
-            current.fields = parse_fields(inner)
+            current.fields = parse_fields(inner, unescape)
           end
         end
         entries[#entries + 1] = {
@@ -977,12 +990,13 @@ function M.load_entries(cfg)
   local entries = {}
   local errors = {}
   local order = 0
+  local unescape = cfg.parser_unescape_basic ~= false
   for _, path in ipairs(files) do
     local text, err = read_file(path)
     if not text then
       errors[#errors + 1] = err or ("Failed to read %s"):format(path)
     else
-      local parsed = parse_entries(text, path)
+      local parsed = parse_entries(text, path, unescape)
       for _, entry in ipairs(parsed) do
         order = order + 1
         entry.order = order
