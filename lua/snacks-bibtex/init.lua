@@ -2001,11 +2001,10 @@ local function make_actions(snacks, cfg)
       return
     end
 
-    -- Check if we're in a .bib file and should insert the full entry
-    local in_bib_file = picker._snacks_bibtex_origin_filetype == "bib"
-    local insert_entry_mode = in_bib_file and cfg.bib_file_insert == "entry"
+    local filetype = picker._snacks_bibtex_origin_filetype or ""
+    local in_bib_file = filetype == "bib"
 
-    if insert_entry_mode then
+    if in_bib_file and cfg.bib_file_insert == "entry" then
       local warn_entry = cfg.warn_on_duplicate_entry ~= false
       local warn_key = cfg.warn_on_duplicate_key ~= false
 
@@ -2028,6 +2027,24 @@ local function make_actions(snacks, cfg)
         end
       end
 
+      insert_text(picker, item.raw or item.key)
+      record_entry_usage(item.key)
+      picker:close()
+      return
+    end
+
+    local insert_mode_by_ft = cfg.insert_mode_by_filetype or {}
+    local mode = insert_mode_by_ft[filetype] or cfg.default_insert_mode or "key"
+
+    if mode == "format" then
+      local entry = item.entry or item
+      local template = resolve_default_citation_template(cfg)
+      local text = apply_citation_template(entry, template, cfg.preview_format)
+      insert_text(picker, text)
+      record_entry_usage(item.key)
+      picker:close()
+      return
+    elseif mode == "entry" then
       insert_text(picker, item.raw or item.key)
       record_entry_usage(item.key)
       picker:close()
