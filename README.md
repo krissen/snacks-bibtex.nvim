@@ -178,6 +178,8 @@ require("snacks-bibtex").setup({
   bib_file_insert = "entry",        -- what to insert when picker is opened from a .bib file ("entry" or "key")
   warn_on_duplicate_key = true,     -- warn when inserting an entry whose key already exists (in .bib files)
   warn_on_duplicate_entry = true,   -- warn when inserting an exact duplicate entry (in .bib files)
+  parser_unescape_basic = true,     -- unescape \" and \\ in quoted strings during parsing (default: true)
+  duplicate_normalization_mode = "whitespace", -- how to normalize entry text for duplicate detection ("none" or "whitespace")
   citation_commands = {             -- toggle citation templates or add your own
     -- each entry: { command, template, description?, packages?, enabled? }
   },
@@ -563,6 +565,17 @@ The parser keeps track of brace balance with a net counter and honors escaped qu
 quoted values reliably. Author/editor names are split only on the literal lowercase ` and ` separator at brace depth zero, so
 capitalized words that contain "And" stay intact while still following BibTeX's requirements.
 
+**Quoted string unescaping:**
+
+By default (`parser_unescape_basic = true`), the parser unescapes `\"` and `\\` sequences inside quoted field values:
+
+- `\"` becomes `"` (literal quote)
+- `\\` becomes `\` (literal backslash)
+
+This means a BibTeX field like `title = "Say \"Hello\""` will be parsed as `Say "Hello"` rather than the raw `Say \"Hello\"`. LaTeX accent commands like `\"a` (ä) are preserved for later conversion by the display layer.
+
+Set `parser_unescape_basic = false` to disable this behavior and keep quoted strings in their raw form.
+
 ### BibTeX file insertion behavior
 
 When you open the picker from a `.bib` file, snacks-bibtex changes its default behavior to help you copy entries between bibliography files:
@@ -583,6 +596,12 @@ When inserting entries into a `.bib` file, snacks-bibtex warns you about potenti
 |--------|---------|-------------|
 | `warn_on_duplicate_entry` | `true` | Warn when the exact entry text already exists |
 | `warn_on_duplicate_key` | `true` | Warn when the citation key already exists (different entry) |
+| `duplicate_normalization_mode` | `"whitespace"` | How to compare entries for duplicates |
+
+The `duplicate_normalization_mode` setting controls how entry text is compared:
+
+- `"whitespace"` (default): Collapse all whitespace (spaces, newlines, tabs) to single spaces before comparing. This detects duplicates even when formatting differs.
+- `"none"`: Compare raw text exactly. Only entries with identical formatting are flagged as duplicates.
 
 Warnings are shown via `vim.notify` but insertion proceeds anyway—resolving duplicates is the user's responsibility.
 
