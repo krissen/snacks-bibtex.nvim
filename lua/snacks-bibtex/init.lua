@@ -1889,6 +1889,7 @@ local function default_mappings_for_cfg(cfg)
   local mappings = {
     ["<CR>"] = "confirm",
     ["<C-e>"] = "insert_entry",
+    ["<C-k>"] = "insert_key_only",
     ["<C-f>"] = "pick_field",
     ["<C-c>"] = "insert_citation",
     ["<C-y>"] = "pick_citation_format",
@@ -1938,8 +1939,12 @@ local function key_exists_in_buffer(picker, key)
   return false
 end
 
+local function normalize_whitespace(s)
+  return s:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
 ---Check if the exact BibTeX entry already exists in the origin buffer.
----Compares the raw entry text (normalized for whitespace) against buffer content.
+---Searches for matching key lines first, then compares a bounded window around each match.
 ---@param picker snacks.Picker
 ---@param raw string The raw BibTeX entry text
 ---@return boolean true if the entry content already exists in the buffer
@@ -1951,13 +1956,29 @@ local function entry_exists_in_buffer(picker, raw)
   if not win or not vim.api.nvim_win_is_valid(win) then
     return false
   end
-  local buf = vim.api.nvim_win_get_buf(win)
-  local content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
-  -- Normalize whitespace for comparison (collapse multiple spaces/newlines)
-  local normalize = function(s)
-    return s:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+
+  local key_match = raw:match("@%w+%s*{%s*([^,%s]+)")
+  if not key_match then
+    return false
   end
-  return content:find(normalize(raw), 1, true) ~= nil
+
+  local buf = vim.api.nvim_win_get_buf(win)
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local key_pattern = "@%w+%s*{%s*" .. vim.pesc(key_match) .. "%s*,"
+  local normalized_raw = normalize_whitespace(raw)
+  local raw_line_count = select(2, raw:gsub("\n", "\n")) + 1
+  local window_size = math.max(raw_line_count + 10, 50)
+
+  for i, line in ipairs(lines) do
+    if line:match(key_pattern) then
+      local end_idx = math.min(i + window_size - 1, #lines)
+      local window_text = table.concat(lines, "\n", i, end_idx)
+      if window_text:find(normalized_raw, 1, true) then
+        return true
+      end
+    end
+  end
+  return false
 end
 
 ---Create picker actions, ensure confirmation inserts into the source buffer, track
@@ -1978,25 +1999,28 @@ local function make_actions(snacks, cfg)
     local insert_entry_mode = in_bib_file and cfg.bib_file_insert == "entry"
 
     if insert_entry_mode then
-      local duplicate_key = key_exists_in_buffer(picker, item.key)
-      local duplicate_entry = entry_exists_in_buffer(picker, item.raw)
+      local warn_entry = cfg.warn_on_duplicate_entry ~= false
+      local warn_key = cfg.warn_on_duplicate_key ~= false
 
-      -- Warn about duplicates (separate messages for clarity)
-      if duplicate_entry then
-        vim.notify(
-          ("Entry '%s' already exists in this file (exact duplicate)"):format(item.key),
-          vim.log.levels.WARN,
-          { title = "snacks-bibtex" }
-        )
-      elseif duplicate_key then
-        vim.notify(
-          ("Key '%s' already exists in this file"):format(item.key),
-          vim.log.levels.WARN,
-          { title = "snacks-bibtex" }
-        )
+      if warn_entry or warn_key then
+        local duplicate_entry = warn_entry and entry_exists_in_buffer(picker, item.raw)
+        local duplicate_key = warn_key and not duplicate_entry and key_exists_in_buffer(picker, item.key)
+
+        if duplicate_entry then
+          vim.notify(
+            ("Entry '%s' already exists in this file (exact duplicate)"):format(item.key),
+            vim.log.levels.WARN,
+            { title = "snacks-bibtex" }
+          )
+        elseif duplicate_key then
+          vim.notify(
+            ("Key '%s' already exists in this file"):format(item.key),
+            vim.log.levels.WARN,
+            { title = "snacks-bibtex" }
+          )
+        end
       end
 
-      -- Insert anyway (user's responsibility to handle duplicates)
       insert_text(picker, item.raw or item.key)
       record_entry_usage(item.key)
       picker:close()
@@ -2064,7 +2088,46 @@ local function make_actions(snacks, cfg)
     if not item then
       return
     end
+    local warn_entry = cfg.warn_on_duplicate_entry ~= false
+    local warn_key = cfg.warn_on_duplicate_key ~= false
+    local in_bib_file = picker._snacks_bibtex_origin_filetype == "bib"
+
+    if in_bib_file and (warn_entry or warn_key) then
+      local duplicate_entry = warn_entry and entry_exists_in_buffer(picker, item.raw)
+      local duplicate_key = warn_key and not duplicate_entry and key_exists_in_buffer(picker, item.key)
+
+      if duplicate_entry then
+        vim.notify(
+          ("Entry '%s' already exists in this file (exact duplicate)"):format(item.key),
+          vim.log.levels.WARN,
+          { title = "snacks-bibtex" }
+        )
+      elseif duplicate_key then
+        vim.notify(
+          ("Key '%s' already exists in this file"):format(item.key),
+          vim.log.levels.WARN,
+          { title = "snacks-bibtex" }
+        )
+      end
+    end
+
     insert_text(picker, item.raw)
+    record_entry_usage(item.key)
+    picker:close()
+  end
+
+  actions.insert_key_only = function(picker, item)
+    if not item then
+      return
+    end
+    local text = item.key
+    if cfg.format and cfg.format ~= "" then
+      local ok, formatted = pcall(string.format, cfg.format, item.key)
+      if ok and formatted then
+        text = formatted
+      end
+    end
+    insert_text(picker, text)
     record_entry_usage(item.key)
     picker:close()
   end
