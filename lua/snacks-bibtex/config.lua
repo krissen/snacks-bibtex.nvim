@@ -68,6 +68,8 @@ local defaults ---@type SnacksBibtexConfig
 ---@field sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil Sorting rules for the initial picker entries
 ---@field match_sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil Sorting rules applied when the query is non-empty
 ---@field bib_file_insert? "entry"|"key" What to insert when picker is opened from a .bib file (default: "entry" for full BibTeX entry)
+---@field warn_on_duplicate_key? boolean Warn when inserting an entry whose key already exists in the buffer (default: true)
+---@field warn_on_duplicate_entry? boolean Warn when inserting an exact duplicate entry in the buffer (default: true)
 
 local function deepcopy(tbl)
   return vim.deepcopy(tbl)
@@ -349,19 +351,19 @@ local function normalize_context_config(context, old_config)
     depth = 1,
     max_files = 100,
   }
-  
+
   -- If context is already a table, merge with defaults
   if type(context) == "table" then
     return vim.tbl_extend("keep", context, defaults_ctx)
   end
-  
+
   -- Backward compatibility: if context is a boolean, check for old flat config
   local result = vim.deepcopy(defaults_ctx)
-  
+
   if type(context) == "boolean" then
     result.enabled = context
   end
-  
+
   -- Check for old flat config keys for backward compatibility
   if old_config then
     if old_config.context_fallback ~= nil then
@@ -374,7 +376,7 @@ local function normalize_context_config(context, old_config)
       result.depth = old_config.context_depth
     end
   end
-  
+
   return result
 end
 
@@ -425,6 +427,8 @@ local function init_defaults()
     locale = "en",
     mappings = {},
     bib_file_insert = "entry",
+    warn_on_duplicate_key = true,
+    warn_on_duplicate_entry = true,
     citation_commands = {
       -- LaTeX / BibTeX
       {
