@@ -1833,8 +1833,9 @@ insert_text = function(picker, text)
   if #lines == 0 then
     return
   end
-  local ok = pcall(vim.api.nvim_buf_set_text, buf, row, col, row, col, lines)
+  local ok, err = pcall(vim.api.nvim_buf_set_text, buf, row, col, row, col, lines)
   if not ok then
+    vim.notify("Failed to insert text: " .. tostring(err), vim.log.levels.ERROR, { title = "snacks-bibtex" })
     return
   end
   local final_row = row + (#lines - 1)
