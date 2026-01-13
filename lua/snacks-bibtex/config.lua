@@ -175,7 +175,7 @@ local function normalize_sort_direction(direction)
   if direction ~= "desc" then
     return "asc"
   end
-  return direction
+  return "desc"
 end
 
 ---@param sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil
