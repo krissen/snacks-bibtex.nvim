@@ -1916,6 +1916,50 @@ local function default_mappings_for_cfg(cfg)
   return mappings
 end
 
+---Check if a BibTeX key already exists in the origin buffer.
+---Searches for patterns like @article{smith2020, or @book{smith2020,
+---@param picker snacks.Picker
+---@param key string The citation key to check (e.g., "smith2020")
+---@return boolean true if the key already exists in the buffer
+local function key_exists_in_buffer(picker, key)
+  local win = picker._snacks_bibtex_origin_win
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    return false
+  end
+  local buf = vim.api.nvim_win_get_buf(win)
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  -- Match @entrytype{key, pattern (handles whitespace variations)
+  local pattern = "@%w+%s*{%s*" .. vim.pesc(key) .. "%s*,"
+  for _, line in ipairs(lines) do
+    if line:match(pattern) then
+      return true
+    end
+  end
+  return false
+end
+
+---Check if the exact BibTeX entry already exists in the origin buffer.
+---Compares the raw entry text (normalized for whitespace) against buffer content.
+---@param picker snacks.Picker
+---@param raw string The raw BibTeX entry text
+---@return boolean true if the entry content already exists in the buffer
+local function entry_exists_in_buffer(picker, raw)
+  if not raw or raw == "" then
+    return false
+  end
+  local win = picker._snacks_bibtex_origin_win
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    return false
+  end
+  local buf = vim.api.nvim_win_get_buf(win)
+  local content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+  -- Normalize whitespace for comparison (collapse multiple spaces/newlines)
+  local normalize = function(s)
+    return s:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  end
+  return content:find(normalize(raw), 1, true) ~= nil
+end
+
 ---Create picker actions, ensure confirmation inserts into the source buffer, track
 ---entry usage for frecency sorting, and offer navigation back to the BibTeX source.
 ---@param snacks snacks.picker
@@ -1928,6 +1972,38 @@ local function make_actions(snacks, cfg)
     if not item then
       return
     end
+
+    -- Check if we're in a .bib file and should insert the full entry
+    local in_bib_file = picker._snacks_bibtex_origin_filetype == "bib"
+    local insert_entry_mode = in_bib_file and cfg.bib_file_insert == "entry"
+
+    if insert_entry_mode then
+      local duplicate_key = key_exists_in_buffer(picker, item.key)
+      local duplicate_entry = entry_exists_in_buffer(picker, item.raw)
+
+      -- Warn about duplicates (separate messages for clarity)
+      if duplicate_entry then
+        vim.notify(
+          ("Entry '%s' already exists in this file (exact duplicate)"):format(item.key),
+          vim.log.levels.WARN,
+          { title = "snacks-bibtex" }
+        )
+      elseif duplicate_key then
+        vim.notify(
+          ("Key '%s' already exists in this file"):format(item.key),
+          vim.log.levels.WARN,
+          { title = "snacks-bibtex" }
+        )
+      end
+
+      -- Insert anyway (user's responsibility to handle duplicates)
+      insert_text(picker, item.raw or item.key)
+      record_entry_usage(item.key)
+      picker:close()
+      return
+    end
+
+    -- Default behavior: insert the key
     local text = item.key
     if cfg.format and cfg.format ~= "" then
       local ok, formatted = pcall(string.format, cfg.format, item.key)
@@ -2286,6 +2362,8 @@ function M.bibtex(opts)
   local list_keys, input_keys = build_keymaps(actions, mappings, cfg)
 
   local origin_win = vim.api.nvim_get_current_win()
+  local origin_buf = vim.api.nvim_win_get_buf(origin_win)
+  local origin_filetype = vim.bo[origin_buf].filetype
   local mode_info = vim.api.nvim_get_mode()
   local origin_mode = mode_info and mode_info.mode or nil
   local matcher_opts = {}
@@ -2337,6 +2415,7 @@ function M.bibtex(opts)
         picker._snacks_bibtex_origin_win = origin_win
       end
       picker._snacks_bibtex_origin_mode = origin_mode
+      picker._snacks_bibtex_origin_filetype = origin_filetype
     end,
   }, picker_opts_user or {})
 

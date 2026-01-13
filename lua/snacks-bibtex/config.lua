@@ -67,6 +67,7 @@ local defaults ---@type SnacksBibtexConfig
 ---@field locale string Preferred locale for textual formats
 ---@field sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil Sorting rules for the initial picker entries
 ---@field match_sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil Sorting rules applied when the query is non-empty
+---@field bib_file_insert? "entry"|"key" What to insert when picker is opened from a .bib file (default: "entry" for full BibTeX entry)
 
 local function deepcopy(tbl)
   return vim.deepcopy(tbl)
@@ -423,6 +424,7 @@ local function init_defaults()
     match_sort = nil,
     locale = "en",
     mappings = {},
+    bib_file_insert = "entry",
     citation_commands = {
       -- LaTeX / BibTeX
       {
