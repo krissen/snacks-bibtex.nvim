@@ -180,6 +180,8 @@ require("snacks-bibtex").setup({
   warn_on_duplicate_entry = true,   -- warn when inserting an exact duplicate entry (in .bib files)
   parser_unescape_basic = true,     -- unescape \" and \\ in quoted strings during parsing (default: true)
   duplicate_normalization_mode = "whitespace", -- how to normalize entry text for duplicate detection ("none" or "whitespace")
+  default_insert_mode = "key",      -- default insertion mode for <CR> outside .bib files ("key" or "format")
+  insert_mode_by_filetype = {},     -- per-filetype overrides: { markdown = "format", tex = "key", typst = "key" }
   citation_commands = {             -- toggle citation templates or add your own
     -- each entry: { command, template, description?, packages?, enabled? }
   },
@@ -617,6 +619,67 @@ require("snacks-bibtex").setup({
   bib_file_insert = "key",
 })
 ```
+
+### Per-filetype insertion modes
+
+You can customize what `<CR>` inserts based on the current file type. This is useful when you want different behavior in prose files (Markdown, Org) versus code-like files (LaTeX, Typst).
+
+**Available modes:**
+
+| Mode | Behavior |
+|------|----------|
+| `"key"` | Insert the citation key formatted via `format` (default: `%s`) |
+| `"format"` | Insert a formatted citation using `citation_format_defaults.in_text` (APA 7 by default) |
+| `"entry"` | Insert the full BibTeX entry |
+
+**Configuration:**
+
+```lua
+require("snacks-bibtex").setup({
+  -- Global default for non-.bib files (default: "key")
+  default_insert_mode = "key",
+
+  -- Per-filetype overrides
+  insert_mode_by_filetype = {
+    markdown = "format",  -- Markdown files: insert APA in-text citation
+    org = "format",       -- Org-mode: insert APA in-text citation
+    rst = "format",       -- reStructuredText: insert APA in-text citation
+    tex = "key",          -- LaTeX: insert key (user likely uses \cite{} themselves)
+    typst = "key",        -- Typst: insert key (user likely uses @key themselves)
+  },
+})
+```
+
+**Resolution order:**
+
+1. If filetype is `bib` and `bib_file_insert = "entry"`: insert full entry (takes precedence)
+2. If `insert_mode_by_filetype[filetype]` is set: use that mode
+3. Otherwise: use `default_insert_mode`
+
+**Example: Insert formatted citations in prose, keys in code:**
+
+```lua
+require("snacks-bibtex").setup({
+  default_insert_mode = "key",
+  insert_mode_by_filetype = {
+    markdown = "format",
+    org = "format",
+    rst = "format",
+    text = "format",
+  },
+})
+```
+
+With this configuration:
+- In `document.md`: `<CR>` inserts `(Smith & Doe, 2020)` (APA in-text)
+- In `paper.tex`: `<CR>` inserts `smith2020` (just the key)
+- In `refs.bib`: `<CR>` inserts the full BibTeX entry (controlled by `bib_file_insert`)
+
+**Note:** Regardless of these settings, you can always use:
+- `<C-k>` to insert just the key
+- `<C-e>` to insert the full entry
+- `<C-s>` to insert the in-text citation format
+- `<C-r>` to insert the reference format
 
 ## 📋 Citation Commands
 
