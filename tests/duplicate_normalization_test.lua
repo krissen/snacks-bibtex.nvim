@@ -59,7 +59,7 @@ local function test_normalize_whitespace()
       expected = false,
     },
     {
-      name = "different spacing around equals not normalized",
+      name = "structural difference preserved (space before equals)",
       a = "@article{test, title={Hello}}",
       b = "@article{test, title = {Hello}}",
       expected = false,

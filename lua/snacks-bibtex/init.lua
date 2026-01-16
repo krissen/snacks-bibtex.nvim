@@ -1779,6 +1779,13 @@ local function append_search_segment(builder, segments, cursor, field, value, pr
   return cursor
 end
 
+---Normalize whitespace in a string (collapse runs to single space, trim)
+---@param s string
+---@return string
+local function normalize_whitespace(s)
+  return s:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
 ---Compute source status for all entries (identifies duplicates across files)
 ---@param entries SnacksBibtexEntry[]
 ---@param cfg SnacksBibtexResolvedConfig
@@ -1827,8 +1834,8 @@ local function compute_source_status(entries, cfg)
         has_any_local = true
       end
 
-      -- Normalize content for comparison (trim whitespace)
-      local normalized = entry.raw:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+      -- Normalize content for comparison
+      local normalized = normalize_whitespace(entry.raw)
       contents[#contents + 1] = normalized
     end
 
@@ -2021,8 +2028,8 @@ local function make_item(entry, cfg, now, source_status_map, show_source_indicat
     local local_entry = excluded_local_entries[entry.key]
     if local_entry then
       -- Normalize content for comparison
-      local entry_raw = entry.raw:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
-      local local_raw = local_entry.raw:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+      local entry_raw = normalize_whitespace(entry.raw)
+      local local_raw = normalize_whitespace(local_entry.raw)
       if entry_raw == local_raw then
         item._sb_source_indicator = "[+L]"
       else
@@ -2282,10 +2289,6 @@ local function key_exists_in_buffer(picker, key)
     end
   end
   return false
-end
-
-local function normalize_whitespace(s)
-  return s:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
 ---Check if the exact BibTeX entry already exists in the origin buffer.

@@ -213,10 +213,7 @@ local function normalize_sort_direction(direction)
   elseif direction == "ascending" then
     direction = "asc"
   end
-  if direction ~= "desc" then
-    return "asc"
-  end
-  return "desc"
+  return direction == "desc" and "desc" or "asc"
 end
 
 ---@param sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil
