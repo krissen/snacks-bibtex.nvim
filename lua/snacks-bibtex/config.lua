@@ -17,6 +17,14 @@ local M = {}
 ---@field locale? string
 ---@field enabled? boolean
 
+-- External snacks.nvim type stubs
+---@alias snacks.picker.Action.spec table
+---@alias snacks.Picker table
+---@alias snacks.picker.Item table
+---@alias snacks.picker table
+---@alias snacks.picker.sort table
+---@alias snacks.picker.Matcher table
+
 ---@alias SnacksBibtexMapping string|fun(picker: snacks.Picker, item: snacks.picker.Item)|snacks.picker.Action.spec
 
 ---@alias SnacksBibtexResolvedConfig SnacksBibtexConfig
@@ -74,6 +82,7 @@ local defaults ---@type SnacksBibtexConfig
 ---@field duplicate_normalization_mode? "none"|"whitespace" How to normalize entry text when checking for duplicates (default: "whitespace")
 ---@field default_insert_mode? "key"|"format" Default insertion mode for <CR> outside .bib files (default: "key")
 ---@field insert_mode_by_filetype? table<string, "key"|"format"|"entry"> Per-filetype overrides for insertion mode (e.g. { markdown = "format", tex = "key" })
+---@field _match_priority? SnacksBibtexMatchPriority Internal: computed match priority configuration
 
 local function deepcopy(tbl)
   return vim.deepcopy(tbl)
