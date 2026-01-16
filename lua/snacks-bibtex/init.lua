@@ -192,6 +192,195 @@ local function compute_frecency(record, now)
   return (count * 1000000) + recency
 end
 
+-- ============================================================================
+-- Local bib target helpers
+-- ============================================================================
+
+---Check if a BibTeX key exists in a file
+---@param path string Absolute path to .bib file
+---@param key string Citation key to check
+---@return boolean
+local function key_exists_in_file(path, key)
+  local stat = uv.fs_stat(path)
+  if not stat or stat.type ~= "file" then
+    return false
+  end
+
+  local fd = uv.fs_open(path, "r", 438)
+  if not fd then
+    return false
+  end
+
+  local content = uv.fs_read(fd, stat.size, 0)
+  uv.fs_close(fd)
+
+  if not content then
+    return false
+  end
+
+  -- Match @entrytype{key,
+  local pattern = "@%w+%s*{%s*" .. vim.pesc(key) .. "%s*,"
+  return content:match(pattern) ~= nil
+end
+
+---Append a BibTeX entry to a file
+---@param path string Absolute path to .bib file
+---@param raw string Raw BibTeX entry text
+---@return boolean success
+---@return string|nil error
+local function append_entry_to_file(path, raw)
+  -- Ensure parent directory exists
+  local dir = vim.fs.dirname(path)
+  if dir and dir ~= "" then
+    vim.fn.mkdir(dir, "p")
+  end
+
+  -- Check if file exists and has content
+  local stat = uv.fs_stat(path)
+  local prefix = ""
+  if stat and stat.size > 0 then
+    -- Read last few bytes to check how file ends
+    local fd = uv.fs_open(path, "r", 438)
+    if fd then
+      local read_size = math.min(stat.size, 2)
+      local last_bytes = uv.fs_read(fd, read_size, stat.size - read_size)
+      uv.fs_close(fd)
+      if last_bytes then
+        -- Ensure blank line between entries
+        if last_bytes:match("\n\n$") then
+          -- Already ends with blank line
+          prefix = ""
+        elseif last_bytes:match("\n$") then
+          -- Ends with single newline, add one more for blank line
+          prefix = "\n"
+        else
+          -- No trailing newline, add two
+          prefix = "\n\n"
+        end
+      end
+    end
+  end
+
+  -- Append entry
+  local fd, err = uv.fs_open(path, "a", 420)
+  if not fd then
+    return false, err
+  end
+
+  local content = prefix .. raw
+  -- Ensure entry ends with newline
+  if not content:match("\n$") then
+    content = content .. "\n"
+  end
+
+  local ok, write_err = pcall(uv.fs_write, fd, content)
+  uv.fs_close(fd)
+
+  if not ok then
+    return false, write_err
+  end
+
+  return true, nil
+end
+
+---Create an empty .bib file with header comment
+---@param path string Absolute path
+---@return boolean success
+---@return string|nil error
+local function create_empty_bib_file(path)
+  local dir = vim.fs.dirname(path)
+  if dir and dir ~= "" then
+    vim.fn.mkdir(dir, "p")
+  end
+
+  local fd, err = uv.fs_open(path, "w", 420)
+  if not fd then
+    return false, err
+  end
+
+  local header = "% Bibliography file created by snacks-bibtex.nvim\n\n"
+  uv.fs_write(fd, header, 0)
+  uv.fs_close(fd)
+
+  return true, nil
+end
+
+---Resolve local bib target file path
+---@param local_bib_cfg SnacksBibtexLocalBibConfig
+---@param cwd string Current working directory
+---@return string|nil path Resolved absolute path or nil
+---@return string|nil source Source of resolution ("target", "targets", "patterns", "created") or nil/error
+local function resolve_local_bib_target(local_bib_cfg, cwd)
+  if not local_bib_cfg or not local_bib_cfg.enabled then
+    return nil, nil
+  end
+
+  -- 1. Per-project explicit targets
+  if local_bib_cfg.targets and local_bib_cfg.targets[cwd] then
+    local target = local_bib_cfg.targets[cwd]
+    local path = vim.fs.normalize(vim.fs.joinpath(cwd, target))
+    if vim.fn.filereadable(path) == 1 then
+      return path, "targets"
+    elseif local_bib_cfg.create_if_missing then
+      local ok, err = create_empty_bib_file(path)
+      if ok then
+        return path, "created"
+      else
+        vim.notify("[snacks-bibtex] Failed to create " .. path .. ": " .. (err or "unknown error"), vim.log.levels.ERROR)
+        return nil, "error:create_failed"
+      end
+    end
+    -- Target specified but file doesn't exist and create_if_missing is false
+    return path, "targets"
+  end
+
+  -- 2. Global explicit target
+  if local_bib_cfg.target then
+    local target = local_bib_cfg.target
+    -- Expand ~ and resolve relative paths
+    target = vim.fn.expand(target)
+    if not vim.startswith(target, "/") then
+      target = vim.fs.joinpath(cwd, target)
+    end
+    local path = vim.fs.normalize(target)
+    if vim.fn.filereadable(path) == 1 then
+      return path, "target"
+    elseif local_bib_cfg.create_if_missing then
+      local ok, err = create_empty_bib_file(path)
+      if ok then
+        return path, "created"
+      else
+        vim.notify("[snacks-bibtex] Failed to create " .. path .. ": " .. (err or "unknown error"), vim.log.levels.ERROR)
+        return nil, "error:create_failed"
+      end
+    end
+    -- Target specified but file doesn't exist and create_if_missing is false
+    return path, "target"
+  end
+
+  -- 3. Pattern auto-detect
+  local patterns = local_bib_cfg.patterns or { "local.bib", "references.bib" }
+  for _, pattern in ipairs(patterns) do
+    local path = vim.fs.joinpath(cwd, pattern)
+    path = vim.fs.normalize(path)
+    if vim.fn.filereadable(path) == 1 then
+      return path, "patterns"
+    end
+  end
+
+  -- 4. Not found - can't create without explicit target
+  if local_bib_cfg.create_if_missing then
+    -- This is a config validation error (should have been caught earlier)
+    return nil, "error:no_explicit_target"
+  end
+
+  return nil, nil
+end
+
+-- ============================================================================
+-- Sorting and extraction helpers
+-- ============================================================================
+
 ---@param value any
 ---@return string|nil
 local function normalize_sort_string(value)
@@ -1590,12 +1779,124 @@ local function append_search_segment(builder, segments, cursor, field, value, pr
   return cursor
 end
 
+---Compute source status for all entries (identifies duplicates across files)
+---@param entries SnacksBibtexEntry[]
+---@param cfg SnacksBibtexResolvedConfig
+---@return table<string, SnacksBibtexSourceInfo> Map of key -> source info
+---@return boolean has_mixed True if there are entries from both local and global files
+local function compute_source_status(entries, cfg)
+  local by_key = {} ---@type table<string, SnacksBibtexEntry[]>
+  local global_files = {} ---@type table<string, boolean>
+
+  -- Build global file set - anything NOT in global_files is considered local
+  for _, f in ipairs(cfg.global_files or {}) do
+    global_files[vim.fs.normalize(f)] = true
+  end
+
+  -- Group entries by key
+  for _, entry in ipairs(entries) do
+    local key = entry.key
+    if not by_key[key] then
+      by_key[key] = {}
+    end
+    by_key[key][#by_key[key] + 1] = entry
+  end
+
+  -- Track if we have entries from both local and global
+  local has_any_local = false
+  local has_any_global = false
+
+  -- Compute status for each key
+  local result = {} ---@type table<string, SnacksBibtexSourceInfo>
+  for key, entry_list in pairs(by_key) do
+    local sources = {}
+    local is_local = false
+    local is_global = false
+    local contents = {}
+
+    for _, entry in ipairs(entry_list) do
+      local file = vim.fs.normalize(entry.file)
+      sources[#sources + 1] = file
+
+      -- Files in global_files are global; everything else is local
+      if global_files[file] then
+        is_global = true
+        has_any_global = true
+      else
+        is_local = true
+        has_any_local = true
+      end
+
+      -- Normalize content for comparison (trim whitespace)
+      local normalized = entry.raw:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+      contents[#contents + 1] = normalized
+    end
+
+    -- Determine status
+    local status = "unique" ---@type SnacksBibtexSourceStatus
+    local has_modifications = false
+
+    if #entry_list > 1 then
+      -- Check if all contents are identical
+      local first = contents[1]
+      local all_identical = true
+      for i = 2, #contents do
+        if contents[i] ~= first then
+          all_identical = false
+          break
+        end
+      end
+
+      status = all_identical and "identical" or "modified"
+      has_modifications = is_local and is_global and not all_identical
+    end
+
+    result[key] = {
+      status = status,
+      sources = sources,
+      is_local = is_local,
+      is_global = is_global,
+      has_local_modifications = has_modifications,
+    }
+  end
+
+  -- Only show indicators if there are entries from both local and global
+  local has_mixed = has_any_local and has_any_global
+  return result, has_mixed
+end
+
+---Format source status indicator for display
+---@param info SnacksBibtexSourceInfo
+---@param is_this_local boolean Whether this specific entry is from a local file
+---@return string
+local function format_source_indicator(info, is_this_local)
+  if info.status == "unique" then
+    if info.is_local and not info.is_global then
+      return "[L]"
+    elseif info.is_global and not info.is_local then
+      return "[G]"
+    else
+      return ""
+    end
+  elseif info.status == "identical" then
+    -- Show this entry's source first
+    return is_this_local and "[L=G]" or "[G=L]"
+  elseif info.status == "modified" then
+    -- Show this entry's source first
+    return is_this_local and "[L≠G]" or "[G≠L]"
+  end
+  return ""
+end
+
 ---Create a picker item enriched with history, segment metadata, and field priorities.
 ---@param entry SnacksBibtexEntry
 ---@param cfg SnacksBibtexResolvedConfig
 ---@param now integer
+---@param source_status_map table<string, SnacksBibtexSourceInfo>|nil
+---@param show_source_indicators boolean|nil Whether to show source indicators
+---@param excluded_local_entries table<string, SnacksBibtexEntry>|nil Entries from excluded local_bib target
 ---@return table
-local function make_item(entry, cfg, now)
+local function make_item(entry, cfg, now, source_status_map, show_source_indicators, excluded_local_entries)
   local fields = entry.fields or {}
   local priority_meta = cfg._match_priority or { map = {}, default = math.huge }
   local builder = {}
@@ -1692,6 +1993,44 @@ local function make_item(entry, cfg, now)
   end
 
   item.key = item.key or ""
+
+  -- Add source status information if available
+  if source_status_map then
+    local source_info = source_status_map[entry.key]
+    if source_info then
+      item.source_status = source_info.status
+      item.source_info = source_info
+      -- Only show indicator when there are entries from both local and global files
+      if show_source_indicators then
+        -- Determine if this specific entry is from a local file
+        local is_this_local = true
+        local entry_file = vim.fs.normalize(entry.file)
+        for _, gf in ipairs(cfg.global_files or {}) do
+          if vim.fs.normalize(gf) == entry_file then
+            is_this_local = false
+            break
+          end
+        end
+        item._sb_source_indicator = format_source_indicator(source_info, is_this_local)
+      end
+    end
+  end
+
+  -- When local_bib target is excluded, show [+L] or [*L] indicators
+  if excluded_local_entries then
+    local local_entry = excluded_local_entries[entry.key]
+    if local_entry then
+      -- Normalize content for comparison
+      local entry_raw = entry.raw:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+      local local_raw = local_entry.raw:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+      if entry_raw == local_raw then
+        item._sb_source_indicator = "[+L]"
+      else
+        item._sb_source_indicator = "[*L]"
+      end
+      item._sb_in_excluded_local = true
+    end
+  end
 
   return item
 end
@@ -1896,6 +2235,12 @@ local function default_mappings_for_cfg(cfg)
     ["<C-g>"] = "open_entry",
   }
 
+  -- Add local_bib mapping if enabled
+  local local_bib_cfg = cfg._local_bib
+  if local_bib_cfg and local_bib_cfg.enabled then
+    mappings["<C-l>"] = "copy_to_local_bib"
+  end
+
   local defaults = cfg.citation_format_defaults or {}
   if defaults.in_text and defaults.in_text ~= "" then
     mappings["<C-s>"] = { kind = "citation_format", id = defaults.in_text }
@@ -2060,11 +2405,95 @@ local function make_actions(snacks, cfg)
     end
     insert_text(picker, text)
     record_entry_usage(item.key)
+
+    -- Auto-add to local bib if enabled
+    local local_bib_cfg_picker = picker._snacks_bibtex_local_bib_cfg
+    if local_bib_cfg_picker and local_bib_cfg_picker.enabled and local_bib_cfg_picker.auto_add then
+      local target_path = picker._snacks_bibtex_local_bib_target
+      if target_path and item.raw then
+        local should_add = true
+        if local_bib_cfg_picker.duplicate_check then
+          should_add = not key_exists_in_file(target_path, item.key)
+        end
+        if should_add then
+          local add_ok, add_err = append_entry_to_file(target_path, item.raw)
+          if add_ok and local_bib_cfg_picker.notify_on_add then
+            vim.notify(
+              ("Added '%s' to %s"):format(item.key, vim.fn.fnamemodify(target_path, ":t")),
+              vim.log.levels.INFO,
+              { title = "snacks-bibtex" }
+            )
+          elseif not add_ok then
+            vim.notify(
+              ("Failed to add '%s' to %s: %s"):format(item.key, vim.fn.fnamemodify(target_path, ":t"), add_err or "unknown error"),
+              vim.log.levels.ERROR,
+              { title = "snacks-bibtex" }
+            )
+          end
+        end
+      end
+    end
+
     picker:close()
   end
 
   actions.insert_key = insert_key_action
   actions.confirm = insert_key_action
+
+  -- Copy entry to local bib file (manual action)
+  actions.copy_to_local_bib = function(picker, item)
+    if not item or not item.raw then
+      return
+    end
+
+    local local_bib_cfg_picker = picker._snacks_bibtex_local_bib_cfg
+    if not local_bib_cfg_picker or not local_bib_cfg_picker.enabled then
+      vim.notify("Local bib target not configured", vim.log.levels.WARN, { title = "snacks-bibtex" })
+      return
+    end
+
+    local target_path = picker._snacks_bibtex_local_bib_target
+    if not target_path then
+      vim.notify("No local bib target found", vim.log.levels.WARN, { title = "snacks-bibtex" })
+      return
+    end
+
+    -- Check for duplicates if enabled
+    if local_bib_cfg_picker.duplicate_check then
+      if key_exists_in_file(target_path, item.key) then
+        vim.notify(
+          ("Entry '%s' already exists in %s"):format(item.key, vim.fn.fnamemodify(target_path, ":t")),
+          vim.log.levels.INFO,
+          { title = "snacks-bibtex" }
+        )
+        -- Still insert citation, just don't copy
+        insert_key_action(picker, item)
+        return
+      end
+    end
+
+    -- Append entry to target file
+    local add_ok, add_err = append_entry_to_file(target_path, item.raw)
+    if not add_ok then
+      vim.notify(
+        ("Failed to write to %s: %s"):format(target_path, add_err or "unknown error"),
+        vim.log.levels.ERROR,
+        { title = "snacks-bibtex" }
+      )
+      return
+    end
+
+    if local_bib_cfg_picker.notify_on_add then
+      vim.notify(
+        ("Added '%s' to %s"):format(item.key, vim.fn.fnamemodify(target_path, ":t")),
+        vim.log.levels.INFO,
+        { title = "snacks-bibtex" }
+      )
+    end
+
+    -- Now insert the citation normally
+    insert_key_action(picker, item)
+  end
 
   actions.open_entry = function(picker, item)
     if not item then
@@ -2433,10 +2862,34 @@ function M.bibtex(opts)
     return
   end
 
+  -- Compute source status for duplicate detection
+  -- has_mixed_sources is true only if there are entries from both local and global files
+  local source_status_map, has_mixed_sources = compute_source_status(entries, cfg)
+
+  -- Resolve local_bib target
+  local local_bib_cfg = cfg._local_bib
+  local local_bib_target
+  local excluded_local_entries  ---@type table<string, SnacksBibtexEntry>|nil
+  if local_bib_cfg and local_bib_cfg.enabled then
+    local cwd = vim.fn.getcwd()
+    local_bib_target = resolve_local_bib_target(local_bib_cfg, cwd)
+
+    -- If local_bib target is excluded, load it separately for status indicators
+    if local_bib_target and parser.is_file_excluded(local_bib_target, cfg.files_exclude or {}) then
+      local excluded_entries = parser.load_entries_from_file(local_bib_target)
+      if excluded_entries and #excluded_entries > 0 then
+        excluded_local_entries = {}
+        for _, e in ipairs(excluded_entries) do
+          excluded_local_entries[e.key] = e
+        end
+      end
+    end
+  end
+
   local items = {}
   local now = os.time()
   for _, entry in ipairs(entries) do
-    items[#items + 1] = make_item(entry, cfg, now)
+    items[#items + 1] = make_item(entry, cfg, now, source_status_map, has_mixed_sources, excluded_local_entries)
   end
   apply_sort(items, cfg)
 
@@ -2481,7 +2934,13 @@ function M.bibtex(opts)
     prompt = " ",
     items = items,
     format = function(item)
-      return { { item.label or item.text } }
+      local parts = {}
+      -- Show source status indicator if enabled and available
+      if cfg.display.show_source_status and item._sb_source_indicator and item._sb_source_indicator ~= "" then
+        parts[#parts + 1] = { item._sb_source_indicator .. " ", "Comment" }
+      end
+      parts[#parts + 1] = { item.label or item.text }
+      return parts
     end,
     actions = actions,
     preview = "preview",
@@ -2501,6 +2960,10 @@ function M.bibtex(opts)
       end
       picker._snacks_bibtex_origin_mode = origin_mode
       picker._snacks_bibtex_origin_filetype = origin_filetype
+      -- Store local_bib configuration for actions
+      picker._snacks_bibtex_local_bib_cfg = local_bib_cfg
+      picker._snacks_bibtex_local_bib_target = local_bib_target
+      picker._snacks_bibtex_cfg = cfg
     end,
   }, picker_opts_user or {})
 

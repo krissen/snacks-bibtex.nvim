@@ -137,6 +137,13 @@ require("snacks-bibtex").setup({
   depth = 1,                        -- recursion depth for project search (nil for unlimited)
   files = nil,                      -- explicit list of project-local bib files (supports ~ / $ENV expansion)
   global_files = {},                -- list of additional bib files (supports ~ / $ENV expansion)
+  files_exclude = {},               -- glob patterns to exclude files from sources (e.g., { "plus.bib" })
+  local_bib = {                     -- copy entries to a local bib file on insert
+    enabled = false,                --   enable the feature
+    target = nil,                   --   explicit target file (relative or absolute)
+    auto_add = false,               --   auto-copy on <CR> insert
+    create_if_missing = false,      --   create target if it doesn't exist
+  },
   context = {                       -- context-aware bibliography file detection
     enabled = false,                --   enable context detection (default: false)
     fallback = true,                --   fall back to project search if no context found (default: true)
@@ -166,6 +173,7 @@ require("snacks-bibtex").setup({
     key_separator = " — ",          -- separator between key and preview when both shown
     preview_fields = nil,           -- optional list of field names to show in preview (overrides preview_format)
     preview_fields_separator = " — ", -- separator between preview fields when preview_fields is used
+    show_source_status = true,      -- show [L]/[G] indicators when local_bib is enabled
   },
   sort = {
     { field = "frecency", direction = "desc" }, -- recently used entries first
@@ -682,6 +690,99 @@ With this configuration:
 - `<C-e>` to insert the full entry
 - `<C-s>` to insert the in-text citation format
 - `<C-r>` to insert the reference format
+
+### Local bibliography target
+
+The `local_bib` feature lets you automatically copy BibTeX entries from a master bibliography to a local project file when inserting citations. This is useful for workflows where you maintain a central reference library but want each project to have its own self-contained `.bib` file.
+
+**Configuration:**
+
+```lua
+require("snacks-bibtex").setup({
+  -- Exclude the local file from sources (so you only see master entries)
+  files_exclude = { "plus.bib" },
+
+  local_bib = {
+    enabled = true,
+    target = "plus.bib",        -- target file for copied entries
+    auto_add = true,            -- automatically copy on normal insert
+    create_if_missing = true,   -- create file if it doesn't exist
+    notify_on_add = true,       -- show notification when entry is copied
+    duplicate_check = true,     -- skip if key already exists in target
+  },
+})
+```
+
+**Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enabled` | `false` | Enable the local bib feature |
+| `target` | `nil` | Explicit target file path (relative to cwd or absolute) |
+| `targets` | `nil` | Per-directory targets: `{ ["/path/to/project"] = "refs.bib" }` |
+| `patterns` | `{"local.bib", "references.bib"}` | Auto-detect target by matching existing files |
+| `auto_add` | `false` | Copy entry to target on every insert via `<CR>` |
+| `notify_on_add` | `true` | Show notification when entry is copied |
+| `create_if_missing` | `false` | Create target file if it doesn't exist |
+| `duplicate_check` | `true` | Skip copy if key already exists in target |
+
+**Target resolution order:**
+
+1. `targets[cwd]` — explicit per-directory mapping
+2. `target` — explicit global target
+3. `patterns` — first matching existing file in cwd
+
+**Keybinding:**
+
+When `local_bib.enabled = true`, `<C-l>` is available to manually copy the selected entry to the local bib target (useful when `auto_add = false`).
+
+### Excluding files from sources
+
+Use `files_exclude` to prevent certain `.bib` files from being loaded as sources. This is commonly combined with `local_bib` to exclude the target file:
+
+```lua
+require("snacks-bibtex").setup({
+  files_exclude = { "plus.bib", "local.bib" },  -- glob patterns
+})
+```
+
+Patterns are matched against both the filename and the relative path, so `"**/generated/*.bib"` would exclude any `.bib` file in a `generated` directory.
+
+### Source status indicators
+
+When entries exist in both local and global files, snacks-bibtex shows indicators to help you understand where each entry comes from:
+
+| Indicator | Meaning |
+|-----------|---------|
+| `[L]` | Entry exists only in local file(s) |
+| `[G]` | Entry exists only in global file(s) |
+| `[L=G]` | Local entry, identical copy exists in global |
+| `[G=L]` | Global entry, identical copy exists in local |
+| `[L≠G]` | Local entry, differs from global version |
+| `[G≠L]` | Global entry, differs from local version |
+
+The first letter indicates which source the current row comes from. When entries exist in both sources, you'll see two rows—one from each source.
+
+**When `files_exclude` hides the local target:**
+
+If your local bib target is excluded via `files_exclude` (common workflow), indicators show whether entries have been added to the local file:
+
+| Indicator | Meaning |
+|-----------|---------|
+| `[+L]` | Entry has been added to local (identical to global) |
+| `[*L]` | Entry exists in local but differs from global |
+
+Indicators only appear when there's meaningful information to show—if all entries come from a single source, no indicators are displayed.
+
+Enable or disable indicators via:
+
+```lua
+require("snacks-bibtex").setup({
+  display = {
+    show_source_status = true,  -- default: true when local_bib is enabled
+  },
+})
+```
 
 ## 📋 Citation Commands
 

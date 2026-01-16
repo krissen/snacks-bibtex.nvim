@@ -957,6 +957,30 @@ local function find_project_files(cfg)
   return found, false
 end
 
+---Check if a file should be excluded based on patterns
+---@param path string Absolute path to file
+---@param patterns string[] Exclusion patterns
+---@return boolean
+local function should_exclude_file(path, patterns)
+  if not patterns or #patterns == 0 then
+    return false
+  end
+  local filename = vim.fn.fnamemodify(path, ":t")
+  local relpath = vim.fn.fnamemodify(path, ":~:.")
+
+  for _, pattern in ipairs(patterns) do
+    -- Match against filename
+    if vim.fn.match(filename, vim.fn.glob2regpat(pattern)) >= 0 then
+      return true
+    end
+    -- Match against relative path (for patterns like "**/generated/*.bib")
+    if vim.fn.match(relpath, vim.fn.glob2regpat(pattern)) >= 0 then
+      return true
+    end
+  end
+  return false
+end
+
 ---Load BibTeX entries from files, respecting context awareness.
 ---When context is enabled and found, global_files are ignored.
 ---@param cfg SnacksBibtexConfig
@@ -964,12 +988,13 @@ end
 function M.load_entries(cfg)
   local files = {}
   local seen = {} ---@type table<string, boolean>
+  local exclude_patterns = cfg.files_exclude or {}
 
   -- Get project files (may be context-aware) and cache context status
   local project_files, has_context = find_project_files(cfg)
 
   for _, path in ipairs(project_files) do
-    if not seen[path] then
+    if not seen[path] and not should_exclude_file(path, exclude_patterns) then
       seen[path] = true
       files[#files + 1] = path
     end
@@ -980,7 +1005,7 @@ function M.load_entries(cfg)
   if not has_context then
     for _, path in ipairs(cfg.global_files or {}) do
       path = vim.fs.normalize(path)
-      if not seen[path] then
+      if not seen[path] and not should_exclude_file(path, exclude_patterns) then
         seen[path] = true
         files[#files + 1] = path
       end
@@ -1005,6 +1030,30 @@ function M.load_entries(cfg)
     end
   end
   return entries, errors
+end
+
+---Check if a file matches any exclusion pattern.
+---@param path string The file path to check
+---@param patterns string[] Exclusion patterns
+---@return boolean True if file should be excluded
+function M.is_file_excluded(path, patterns)
+  return should_exclude_file(path, patterns)
+end
+
+---Load entries from a specific bib file.
+---@param path string The file path
+---@param unescape boolean|nil Whether to unescape basic LaTeX (default true)
+---@return SnacksBibtexEntry[]|nil entries Entries or nil on error
+---@return string|nil error Error message if failed
+function M.load_entries_from_file(path, unescape)
+  if unescape == nil then
+    unescape = true
+  end
+  local text, err = read_file(path)
+  if not text then
+    return nil, err or ("Failed to read %s"):format(path)
+  end
+  return parse_entries(text, path, unescape), nil
 end
 
 return M
