@@ -96,9 +96,12 @@ local_bib = {
 
 | Key | Action |
 |-----|--------|
-| `<C-l>` | Copy entry to local bib target (available when `local_bib.enabled = true`) |
+| `<C-l>` | Copy to local bib + insert citation |
+| `<M-l>` | Copy to local bib only (no insertion) |
 
-When `auto_add = false`, use `<C-l>` to manually copy entries. When `auto_add = true`, entries are copied automatically on `<CR>`.
+Both keybindings are available when `local_bib.enabled = true`.
+
+When `auto_add = false`, use `<C-l>` to copy and cite, or `<M-l>` to just build up your local bib without inserting citations yet. When `auto_add = true`, entries are copied automatically on `<CR>`.
 
 ### Duplicate Handling
 

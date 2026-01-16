@@ -2242,10 +2242,11 @@ local function default_mappings_for_cfg(cfg)
     ["<C-g>"] = "open_entry",
   }
 
-  -- Add local_bib mapping if enabled
+  -- Add local_bib mappings if enabled
   local local_bib_cfg = cfg._local_bib
   if local_bib_cfg and local_bib_cfg.enabled then
     mappings["<C-l>"] = "copy_to_local_bib"
+    mappings["<M-l>"] = "copy_to_local_bib_only"
   end
 
   local defaults = cfg.citation_format_defaults or {}
@@ -2496,6 +2497,58 @@ local function make_actions(snacks, cfg)
 
     -- Now insert the citation normally
     insert_key_action(picker, item)
+  end
+
+  -- Copy entry to local bib file only (no insertion)
+  actions.copy_to_local_bib_only = function(picker, item)
+    if not item or not item.raw then
+      return
+    end
+
+    local local_bib_cfg_picker = picker._snacks_bibtex_local_bib_cfg
+    if not local_bib_cfg_picker or not local_bib_cfg_picker.enabled then
+      vim.notify("Local bib target not configured", vim.log.levels.WARN, { title = "snacks-bibtex" })
+      return
+    end
+
+    local target_path = picker._snacks_bibtex_local_bib_target
+    if not target_path then
+      vim.notify("No local bib target found", vim.log.levels.WARN, { title = "snacks-bibtex" })
+      return
+    end
+
+    -- Check for duplicates if enabled
+    if local_bib_cfg_picker.duplicate_check then
+      if key_exists_in_file(target_path, item.key) then
+        vim.notify(
+          ("Entry '%s' already exists in %s"):format(item.key, vim.fn.fnamemodify(target_path, ":t")),
+          vim.log.levels.INFO,
+          { title = "snacks-bibtex" }
+        )
+        return
+      end
+    end
+
+    -- Append entry to target file
+    local add_ok, add_err = append_entry_to_file(target_path, item.raw)
+    if not add_ok then
+      vim.notify(
+        ("Failed to write to %s: %s"):format(target_path, add_err or "unknown error"),
+        vim.log.levels.ERROR,
+        { title = "snacks-bibtex" }
+      )
+      return
+    end
+
+    if local_bib_cfg_picker.notify_on_add then
+      vim.notify(
+        ("Added '%s' to %s"):format(item.key, vim.fn.fnamemodify(target_path, ":t")),
+        vim.log.levels.INFO,
+        { title = "snacks-bibtex" }
+      )
+    end
+    -- No insertion - just close picker
+    picker:close()
   end
 
   actions.open_entry = function(picker, item)

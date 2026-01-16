@@ -195,7 +195,8 @@ require("snacks-bibtex").setup({
 | `<C-y>` | Open citation format picker |
 | `<C-f>` | Open field picker |
 | `<C-g>` | Jump to BibTeX source |
-| `<C-l>` | Copy to local bib (when enabled) |
+| `<C-l>` | Copy to local bib + insert citation (when enabled) |
+| `<M-l>` | Copy to local bib only (when enabled) |
 
 ## Custom Mappings
 

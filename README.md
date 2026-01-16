@@ -61,7 +61,8 @@ Run `:SnacksBibtex` or call `require("snacks-bibtex").bibtex()` to open the pick
 | `<C-y>` | Open citation format picker |
 | `<C-f>` | Pick and insert a single field |
 | `<C-g>` | Jump to BibTeX source file |
-| `<C-l>` | Copy entry to local bib (when enabled) |
+| `<C-l>` | Copy to local bib + insert citation (when enabled) |
+| `<M-l>` | Copy to local bib only (when enabled) |
 
 ## Configuration
 
