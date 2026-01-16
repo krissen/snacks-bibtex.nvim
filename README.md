@@ -9,7 +9,7 @@ Scan local and global `*.bib` files, preview entries, and insert citation keys o
 - 📖 **Flexible BibTeX integration** – Finds entries from project-local and global libraries
 - 🎯 **Context awareness** – Auto-detect bibliography files from YAML frontmatter, LaTeX preambles, or Typst documents
 - 🔍 **Smart search** – Configurable fields (author, title, year, …) with LaTeX accent awareness
-- 📝 **Multiple insertion modes** – Citation keys, formatted references, full entries, individual fields, or insert raw `bib`-entries
+- 📝 **Multiple insertion modes** – Citation keys, formatted references, full entries, individual fields, or insert raw `.bib` entries
 - 🎯 **Rich previews** – See BibTeX source and formatted output before inserting
 - ⚡ **Quick shortcuts** – Pre-configured for `\cite`, `\citep`, `\citet`, `@key`, and common citation formats
 - 🎨 **Citation styles** – APA 7, Harvard, Oxford templates with live preview
