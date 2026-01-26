@@ -17,6 +17,14 @@ local M = {}
 ---@field locale? string
 ---@field enabled? boolean
 
+-- External snacks.nvim type stubs
+---@alias snacks.picker.Action.spec table
+---@alias snacks.Picker table
+---@alias snacks.picker.Item table
+---@alias snacks.picker table
+---@alias snacks.picker.sort table
+---@alias snacks.picker.Matcher table
+
 ---@alias SnacksBibtexMapping string|fun(picker: snacks.Picker, item: snacks.picker.Item)|snacks.picker.Action.spec
 
 ---@alias SnacksBibtexResolvedConfig SnacksBibtexConfig
@@ -39,6 +47,29 @@ local defaults ---@type SnacksBibtexConfig
 ---@field key_separator string Separator between key and preview when both are shown
 ---@field preview_fields string[]|nil Optional list of field names to show in preview (overrides preview_format)
 ---@field preview_fields_separator string Separator between preview fields when preview_fields is used
+---@field show_source_status boolean Whether to show source status indicator (default: true)
+
+---@alias SnacksBibtexSourceStatus
+---| "unique"       # Entry exists in only one source file
+---| "identical"    # Entry exists in multiple files with identical content
+---| "modified"     # Entry exists in multiple files with different content
+
+---@class SnacksBibtexSourceInfo
+---@field status SnacksBibtexSourceStatus
+---@field sources string[] List of source files containing this key
+---@field is_local boolean True if entry exists in a local file (from `files`)
+---@field is_global boolean True if entry exists in a global file (from `global_files`)
+---@field has_local_modifications boolean True if local version differs from global
+
+---@class SnacksBibtexLocalBibConfig
+---@field enabled boolean Enable local bib target functionality (default: false)
+---@field target string|nil Explicit path to target file (relative to cwd or absolute)
+---@field targets table<string, string>|nil Per-directory mapping: { ["/path/to/project"] = "refs.bib" }
+---@field patterns string[]|nil Auto-detect patterns for existing files (default: {"local.bib", "references.bib"})
+---@field auto_add boolean On normal insert, also copy entry to target (default: false)
+---@field notify_on_add boolean Show notification when entry is added (default: true)
+---@field create_if_missing boolean Create target file if not found (requires explicit target) (default: false)
+---@field duplicate_check boolean Check for duplicate keys before adding (default: true)
 
 ---@class SnacksBibtexContextConfig
 ---@field enabled boolean|nil Enable context-aware bibliography file detection from current buffer (default: false)
@@ -50,8 +81,10 @@ local defaults ---@type SnacksBibtexConfig
 ---@class SnacksBibtexConfig
 ---@field depth integer|nil Directory recursion depth for local bib search
 ---@field files string[]|nil Explicit list of project-local bib files
+---@field files_exclude string[]|nil List of file patterns to exclude from sources (e.g., {"sync.bib", "**/generated/*.bib"})
 ---@field global_files string[]|nil List of global bib files (outside project)
 ---@field context boolean|SnacksBibtexContextConfig|nil Context-aware bibliography detection. Boolean: true=enable with defaults, false=disable. Table: {enabled: boolean, fallback: boolean, inherit: boolean, depth: integer, max_files: integer}
+---@field local_bib SnacksBibtexLocalBibConfig|boolean|nil Local bib target config for copying entries. Boolean: true=enable with defaults, false=disable.
 ---@field search_fields string[] Ordered list of fields to search (e.g. {"author","title","year","keywords"})
 ---@field format string Default format for inserting citation keys or labels
 ---@field preview_format string Template used to format the preview line(s)
@@ -67,6 +100,15 @@ local defaults ---@type SnacksBibtexConfig
 ---@field locale string Preferred locale for textual formats
 ---@field sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil Sorting rules for the initial picker entries
 ---@field match_sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil Sorting rules applied when the query is non-empty
+---@field bib_file_insert? "entry"|"key" What to insert when picker is opened from a .bib file (default: "entry" for full BibTeX entry)
+---@field warn_on_duplicate_key? boolean Warn when inserting an entry whose key already exists in the buffer (default: true)
+---@field warn_on_duplicate_entry? boolean Warn when inserting an exact duplicate entry in the buffer (default: true)
+---@field parser_unescape_basic? boolean Unescape \" and \\ in quoted strings during parsing (default: true)
+---@field duplicate_normalization_mode? "none"|"whitespace" How to normalize entry text when checking for duplicates (default: "whitespace")
+---@field default_insert_mode? "key"|"format" Default insertion mode for <CR> outside .bib files (default: "key")
+---@field insert_mode_by_filetype? table<string, "key"|"format"|"entry"> Per-filetype overrides for insertion mode (e.g. { markdown = "format", tex = "key" })
+---@field _match_priority? SnacksBibtexMatchPriority Internal: computed match priority configuration
+---@field _local_bib? SnacksBibtexLocalBibConfig Internal: normalized local_bib configuration
 
 local function deepcopy(tbl)
   return vim.deepcopy(tbl)
@@ -171,10 +213,7 @@ local function normalize_sort_direction(direction)
   elseif direction == "ascending" then
     direction = "asc"
   end
-  if direction ~= "desc" then
-    return "asc"
-  end
-  return direction
+  return direction == "desc" and "desc" or "asc"
 end
 
 ---@param sort SnacksBibtexSortSpec|SnacksBibtexSortSpec[]|nil
@@ -305,6 +344,7 @@ local function normalize_display(display)
       key_separator = " — ",
       preview_fields = nil,
       preview_fields_separator = " — ",
+      show_source_status = true,
     }
   end
   local normalized = {
@@ -313,6 +353,7 @@ local function normalize_display(display)
     key_separator = normalize_separator(display.key_separator, " — "),
     preview_fields = (type(display.preview_fields) == "table") and display.preview_fields or nil,
     preview_fields_separator = normalize_separator(display.preview_fields_separator, " — "),
+    show_source_status = display.show_source_status == nil and true or display.show_source_status,
   }
   if normalized.preview_fields ~= nil then
     -- Filter out empty strings but preserve case for field names
@@ -348,19 +389,19 @@ local function normalize_context_config(context, old_config)
     depth = 1,
     max_files = 100,
   }
-  
+
   -- If context is already a table, merge with defaults
   if type(context) == "table" then
     return vim.tbl_extend("keep", context, defaults_ctx)
   end
-  
+
   -- Backward compatibility: if context is a boolean, check for old flat config
   local result = vim.deepcopy(defaults_ctx)
-  
+
   if type(context) == "boolean" then
     result.enabled = context
   end
-  
+
   -- Check for old flat config keys for backward compatibility
   if old_config then
     if old_config.context_fallback ~= nil then
@@ -373,7 +414,81 @@ local function normalize_context_config(context, old_config)
       result.depth = old_config.context_depth
     end
   end
-  
+
+  return result
+end
+
+---Normalize local_bib configuration (handle boolean shorthand)
+---@param local_bib any The local_bib configuration value
+---@return SnacksBibtexLocalBibConfig|nil
+local function normalize_local_bib_config(local_bib)
+  if local_bib == nil or local_bib == false then
+    return nil
+  end
+
+  local defaults_lb = {
+    enabled = false,
+    target = nil,
+    targets = {},
+    patterns = { "local.bib", "references.bib" },
+    auto_add = false,
+    notify_on_add = true,
+    create_if_missing = false,
+    duplicate_check = true,
+  }
+
+  if local_bib == true then
+    local result = vim.deepcopy(defaults_lb)
+    result.enabled = true
+    return result
+  end
+
+  if type(local_bib) == "table" then
+    local result = vim.tbl_deep_extend("keep", local_bib, defaults_lb)
+    -- Ensure enabled is set if any other option is provided
+    if local_bib.enabled == nil and (local_bib.target or local_bib.auto_add or local_bib.patterns) then
+      result.enabled = true
+    end
+    return result
+  end
+
+  return nil
+end
+
+---Validate local_bib configuration
+---@param local_bib SnacksBibtexLocalBibConfig|nil
+---@return string[] warnings List of warning messages
+local function validate_local_bib_config(local_bib)
+  local warnings = {}
+
+  if not local_bib or not local_bib.enabled then
+    return warnings
+  end
+
+  -- create_if_missing requires explicit target
+  if local_bib.create_if_missing then
+    local has_explicit = local_bib.target ~= nil or (local_bib.targets and not vim.tbl_isempty(local_bib.targets))
+    if not has_explicit then
+      warnings[#warnings + 1] = "local_bib.create_if_missing requires explicit 'target' or 'targets' (patterns only match existing files)"
+    end
+  end
+
+  return warnings
+end
+
+---Normalize files_exclude patterns
+---@param patterns string[]|nil
+---@return string[]
+local function normalize_files_exclude(patterns)
+  if not patterns or type(patterns) ~= "table" then
+    return {}
+  end
+  local result = {}
+  for _, pattern in ipairs(patterns) do
+    if type(pattern) == "string" and pattern ~= "" then
+      result[#result + 1] = pattern
+    end
+  end
   return result
 end
 
@@ -382,6 +497,7 @@ local function init_defaults()
   defaults = {
     depth = 1,
     files = nil,
+    files_exclude = {},
     global_files = {},
     context = {
       enabled = false,
@@ -390,6 +506,7 @@ local function init_defaults()
       depth = 1,
       max_files = 100,
     },
+    local_bib = nil,
     search_fields = { "author", "year", "title", "journal", "journaltitle", "editor" },
     match_priority = { "author", "year", "title" },
     format = "%s",
@@ -413,6 +530,7 @@ local function init_defaults()
       key_separator = " — ",
       preview_fields = nil,
       preview_fields_separator = " — ",
+      show_source_status = true,
     },
     sort = {
       { field = "frecency", direction = "desc" },
@@ -423,6 +541,13 @@ local function init_defaults()
     match_sort = nil,
     locale = "en",
     mappings = {},
+    bib_file_insert = "entry",
+    warn_on_duplicate_key = true,
+    warn_on_duplicate_entry = true,
+    parser_unescape_basic = true,
+    duplicate_normalization_mode = "whitespace",
+    default_insert_mode = "key",
+    insert_mode_by_filetype = {},
     citation_commands = {
       -- LaTeX / BibTeX
       {
@@ -1122,15 +1247,24 @@ function M.resolve(opts)
   end
   local merged = vim.tbl_deep_extend("force", M.get(), opts)
   merged.files = normalize_files(merged.files) or merged.files
+  merged.files_exclude = normalize_files_exclude(merged.files_exclude)
   merged.global_files = normalize_files(merged.global_files) or merged.global_files
   merged.global_files = merged.global_files or {}
   merged.display = normalize_display(merged.display)
   merged.context = normalize_context_config(merged.context, opts)
+  merged._local_bib = normalize_local_bib_config(merged.local_bib)
   normalize_citation_commands(merged.citation_commands)
   normalize_citation_formats(merged.citation_formats)
   merged.sort = normalize_sort(merged.sort)
   merged.match_sort = ensure_match_sort(merged.match_sort, merged.sort)
   apply_match_priority(merged)
+
+  -- Validate local_bib configuration and emit warnings
+  local local_bib_warnings = validate_local_bib_config(merged._local_bib)
+  for _, warning in ipairs(local_bib_warnings) do
+    vim.notify("[snacks-bibtex] " .. warning, vim.log.levels.WARN)
+  end
+
   return merged
 end
 

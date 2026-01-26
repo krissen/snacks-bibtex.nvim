@@ -2,6 +2,16 @@ local uv = vim.uv or vim.loop
 
 local M = {}
 
+local function unescape_basic_quoted(s)
+  if type(s) ~= "string" or s == "" then
+    return s
+  end
+  s = s:gsub("\\\\", "\1")
+  s = s:gsub('\\"', '"')
+  s = s:gsub("\1", "\\")
+  return s
+end
+
 ---@class SnacksBibtexEntry
 ---@field key string
 ---@field type string
@@ -81,8 +91,9 @@ end
 
 ---@param body string
 ---@param idx integer
+---@param unescape boolean|nil
 ---@return string, integer
-local function parse_value(body, idx)
+local function parse_value(body, idx, unescape)
   local len = #body
   while idx <= len and body:sub(idx, idx):match("%s") do
     idx = idx + 1
@@ -112,13 +123,23 @@ local function parse_value(body, idx)
     local j = idx + 1
     while j <= len do
       local ch = body:sub(j, j)
-      local prev = j > 1 and body:sub(j - 1, j - 1) or nil
-      if ch == '"' and prev ~= "\\" then
-        break
+      if ch == '"' then
+        local num_backslashes = 0
+        local k = j - 1
+        while k >= 1 and body:sub(k, k) == "\\" do
+          num_backslashes = num_backslashes + 1
+          k = k - 1
+        end
+        if num_backslashes % 2 == 0 then
+          break
+        end
       end
       j = j + 1
     end
     local value = body:sub(idx + 1, j - 1)
+    if unescape then
+      value = unescape_basic_quoted(value)
+    end
     return vim.trim(value), j + 1
   else
     local s, e = body:find("[^,%}]+", idx)
@@ -130,7 +151,7 @@ local function parse_value(body, idx)
   end
 end
 
-local function parse_fields(body)
+local function parse_fields(body, unescape)
   local fields = {}
   local idx = 1
   local len = #body
@@ -141,7 +162,7 @@ local function parse_fields(body)
     end
     idx = next_idx + 1
     local value
-    value, idx = parse_value(body, idx)
+    value, idx = parse_value(body, idx, unescape)
     if value ~= "" then
       fields[name:lower()] = value
     end
@@ -154,8 +175,9 @@ end
 
 ---@param text string
 ---@param path string
+---@param unescape boolean|nil
 ---@return SnacksBibtexEntry[]
-local function parse_entries(text, path)
+local function parse_entries(text, path, unescape)
   local entries = {}
   local lines = vim.split(text, "\n", { plain = true })
   local current
@@ -195,7 +217,7 @@ local function parse_entries(text, path)
           if inner then
             inner = inner:sub(2, -2)
             inner = inner:gsub("^%s*[^,%s]+%s*,", "", 1)
-            current.fields = parse_fields(inner)
+            current.fields = parse_fields(inner, unescape)
           end
         end
         entries[#entries + 1] = {
@@ -225,7 +247,7 @@ end
 ---@return string[]
 local function find_potential_main_files(current_file, current_dir, context_depth, max_files, filetype)
   local main_files = {}
-  
+
   -- Maximum depth when nil is specified to prevent infinite loops or excessive searches.
   -- Limited to 10 levels as most project structures don't exceed this depth,
   -- and deeper searches significantly impact performance.
@@ -239,7 +261,7 @@ local function find_potential_main_files(current_file, current_dir, context_dept
   elseif max_depth < 0 then
     max_depth = 0
   end
-  
+
   -- Default max_files to 100 if not specified
   local file_limit = max_files or 100
 
@@ -255,7 +277,7 @@ local function find_potential_main_files(current_file, current_dir, context_dept
     table.insert(search_dirs, parent)
     dir = parent
   end
-  
+
   -- Determine file extension and inclusion patterns based on filetype
   local file_extension, inclusion_patterns
   if filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
@@ -288,7 +310,7 @@ local function find_potential_main_files(current_file, current_dir, context_dept
         local ok, lines = pcall(vim.fn.readfile, main_file)
         if ok and lines then
           local content = table.concat(lines, "\n")
-          
+
           -- Remove comments based on filetype
           if filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
             -- Remove LaTeX comments
@@ -300,12 +322,12 @@ local function find_potential_main_files(current_file, current_dir, context_dept
             -- Note: This doesn't handle nested block comments, which are valid in Typst
             content = content:gsub("/%*.-%*/", "")
           end
-          
+
           -- Check for various inclusion commands
           for _, pattern in ipairs(inclusion_patterns) do
             for included_file in content:gmatch(pattern) do
               included_file = vim.trim(included_file)
-              
+
               -- Handle file extension - commands may omit it
               if filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
                 if not included_file:match("%.tex$") then
@@ -316,7 +338,7 @@ local function find_potential_main_files(current_file, current_dir, context_dept
                   included_file = included_file .. ".typ"
                 end
               end
-              
+
               -- Resolve included_file relative to main_file's directory and compare full paths
               -- Use pcall for path operations to handle potential filesystem errors
               local main_dir = vim.fn.fnamemodify(main_file, ":h")
@@ -420,7 +442,7 @@ local function detect_context_files_from_content(lines, file_dir, filetype)
   elseif filetype == "typst" then
     -- Typst: #bibliography("file.bib") or #let var = bibliography("file.bib")
     -- For context inheritance, we use a simplified approach without import handling
-    
+
     ---Extract bibliography file path from Typst line
     ---Matches #bibliography("file") or #bibliography('file') patterns
     ---@param line string
@@ -428,10 +450,10 @@ local function detect_context_files_from_content(lines, file_dir, filetype)
     local function extract_bib_file(line)
       -- Match both single and double quotes
       -- Note: Typst identifiers can contain letters, numbers, underscores, and hyphens
-      return line:match('#bibliography%s*%(%s*["\']([^"\']+)["\']%s*%)')
-        or line:match('#let%s+[%w_%-]+%s*=%s*bibliography%s*%(%s*["\']([^"\']+)["\']%s*%)')
+      return line:match("#bibliography%s*%(%s*[\"']([^\"']+)[\"']%s*%)")
+        or line:match("#let%s+[%w_%-]+%s*=%s*bibliography%s*%(%s*[\"']([^\"']+)[\"']%s*%)")
     end
-    
+
     for _, line in ipairs(lines) do
       -- Skip Typst comment lines (lines starting with //)
       if not line:match("^%s*//") then
@@ -445,7 +467,7 @@ local function detect_context_files_from_content(lines, file_dir, filetype)
         if comment_pos then
           line = line:sub(1, comment_pos - 1)
         end
-        
+
         -- Match #bibliography() patterns
         local bib_file = extract_bib_file(line)
         if bib_file then
@@ -556,7 +578,7 @@ local function detect_context_files(cfg)
     -- Can be single or multiple files
     local in_bibliography_array = false
     local yaml_depth = 0
-    
+
     ---Remove YAML inline comments (text after # outside of quotes)
     ---@param text string
     ---@return string
@@ -643,13 +665,13 @@ local function detect_context_files(cfg)
     end
   elseif filetype == "tex" or filetype == "plaintex" or filetype == "latex" then
     -- LaTeX: \bibliography{file} or \addbibresource{file}
-    
+
     for _, line in ipairs(lines) do
       -- Skip LaTeX comment lines (lines starting with %)
       if not line:match("^%s*%%") then
         -- Strip inline comments
         line = strip_latex_comment(line)
-        
+
         -- \bibliography{file} - file without extension
         local bib_file = line:match("\\bibliography%s*{([^}]+)}")
         if bib_file then
@@ -680,7 +702,7 @@ local function detect_context_files(cfg)
   elseif filetype == "typst" then
     -- Typst: #bibliography("file.bib"), #bibliography("file.yml"), or imported references
     local imported_files = {} ---@type table<string, boolean>
-    
+
     ---Remove block comments from content while preserving line count
     ---Note: Typst block comments DO nest (unlike C/C++), so we need a nesting-aware algorithm
     ---@param text string
@@ -690,13 +712,13 @@ local function detect_context_files(cfg)
       local i = 1
       local len = #text
       while i <= len do
-        local two_chars = i + 1 <= len and text:sub(i, i+1) or ""
+        local two_chars = i + 1 <= len and text:sub(i, i + 1) or ""
         if two_chars == "/*" then
           local depth = 1
           local start_i = i
           i = i + 2
           while i <= len and depth > 0 do
-            two_chars = i + 1 <= len and text:sub(i, i+1) or ""
+            two_chars = i + 1 <= len and text:sub(i, i + 1) or ""
             if two_chars == "/*" then
               depth = depth + 1
               i = i + 2
@@ -709,7 +731,7 @@ local function detect_context_files(cfg)
           end
           -- Preserve newlines
           local removed = text:sub(start_i, i - 1)
-          local _, newline_count = removed:gsub('\n', '')
+          local _, newline_count = removed:gsub("\n", "")
           for _ = 1, newline_count do
             result[#result + 1] = "\n"
           end
@@ -720,11 +742,11 @@ local function detect_context_files(cfg)
       end
       return table.concat(result)
     end
-    
+
     -- Remove block comments from the content before processing
     local content = table.concat(lines, "\n")
     content = remove_block_comments(content)
-    
+
     ---Remove Typst inline comments (text after //)
     ---Note: This doesn't handle // inside string literals, but for extracting
     ---file paths from #bibliography() and #import statements, this is typically fine
@@ -743,7 +765,7 @@ local function detect_context_files(cfg)
             in_double = true
           elseif c == "'" then
             in_single = true
-          elseif c == "/" and i < len and text:sub(i, i+1) == "//" then
+          elseif c == "/" and i < len and text:sub(i, i + 1) == "//" then
             -- Found // outside of string, return up to here
             return text:sub(1, i - 1)
           end
@@ -780,7 +802,7 @@ local function detect_context_files(cfg)
       end
       return text
     end
-    
+
     ---Extract bibliography file path from Typst line
     ---Matches #bibliography("file") or #let var = bibliography("file") patterns
     ---@param line string
@@ -791,19 +813,18 @@ local function detect_context_files(cfg)
         or line:match('#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*"([^"]+)"%s*%)')
         or line:match("#let%s+[%w%-]+%s*=%s*bibliography%s*%(%s*'([^']+)'%s*%)")
     end
-    
+
     -- Split back into lines after removing block comments
-    local processed_lines = vim.split(content, '\n', { plain = true })
-    
+    local processed_lines = vim.split(content, "\n", { plain = true })
+
     for _, line in ipairs(processed_lines) do
       -- Skip Typst single-line comments (lines starting with //)
       if not line:match("^%s*//") then
         -- Strip inline comments
         line = strip_typst_inline_comment(line)
-        
+
         -- Match #import "refs.typ": refs pattern to find imported files
-        local import_file = line:match('#import%s+"([^"]+)"%s*:')
-          or line:match("#import%s+'([^']+)'%s*:")
+        local import_file = line:match('#import%s+"([^"]+)"%s*:') or line:match("#import%s+'([^']+)'%s*:")
         if import_file and not imported_files[import_file] then
           imported_files[import_file] = true
           -- Resolve relative path for imported file
@@ -814,7 +835,7 @@ local function detect_context_files(cfg)
             import_path = import_file
           end
           local normalized_import = vim.fs.normalize(import_path)
-          
+
           -- Read and parse the imported file for bibliography calls
           local import_stat = uv.fs_stat(normalized_import)
           if import_stat and import_stat.type == "file" then
@@ -823,14 +844,14 @@ local function detect_context_files(cfg)
               -- Remove block comments from imported file content
               local import_content = table.concat(import_lines, "\n")
               import_content = remove_block_comments(import_content)
-              
+
               -- Process the imported file content
-              local import_processed_lines = vim.split(import_content, '\n', { plain = true })
+              local import_processed_lines = vim.split(import_content, "\n", { plain = true })
               for _, import_line in ipairs(import_processed_lines) do
                 if not import_line:match("^%s*//") then
                   -- Strip inline comments
                   import_line = strip_typst_inline_comment(import_line)
-                  
+
                   local bib_file = extract_bib_file(import_line)
                   if bib_file then
                     -- Resolve relative path from imported file's directory
@@ -848,7 +869,7 @@ local function detect_context_files(cfg)
             end
           end
         end
-        
+
         -- Match direct #bibliography("file.bib") or #bibliography("file.yml") calls
         -- Also match #let assignments like: #let my-refs = bibliography("file.bib")
         local bib_file = extract_bib_file(line)
@@ -864,7 +885,8 @@ local function detect_context_files(cfg)
   if #files == 0 and cfg and cfg.context and type(cfg.context) == "table" and cfg.context.inherit ~= false then
     local context_depth = cfg.context.depth or 1
     local max_files = cfg.context.max_files or 100
-    local inherited_files = inherit_context_from_main_file(current_file, current_dir, filetype, context_depth, max_files)
+    local inherited_files =
+      inherit_context_from_main_file(current_file, current_dir, filetype, context_depth, max_files)
     if inherited_files and #inherited_files > 0 then
       return inherited_files
     end
@@ -935,6 +957,30 @@ local function find_project_files(cfg)
   return found, false
 end
 
+---Check if a file should be excluded based on patterns
+---@param path string Absolute path to file
+---@param patterns string[] Exclusion patterns
+---@return boolean
+local function should_exclude_file(path, patterns)
+  if not patterns or #patterns == 0 then
+    return false
+  end
+  local filename = vim.fn.fnamemodify(path, ":t")
+  local relpath = vim.fn.fnamemodify(path, ":~:.")
+
+  for _, pattern in ipairs(patterns) do
+    -- Match against filename
+    if vim.fn.match(filename, vim.fn.glob2regpat(pattern)) >= 0 then
+      return true
+    end
+    -- Match against relative path (for patterns like "**/generated/*.bib")
+    if vim.fn.match(relpath, vim.fn.glob2regpat(pattern)) >= 0 then
+      return true
+    end
+  end
+  return false
+end
+
 ---Load BibTeX entries from files, respecting context awareness.
 ---When context is enabled and found, global_files are ignored.
 ---@param cfg SnacksBibtexConfig
@@ -942,12 +988,13 @@ end
 function M.load_entries(cfg)
   local files = {}
   local seen = {} ---@type table<string, boolean>
+  local exclude_patterns = cfg.files_exclude or {}
 
   -- Get project files (may be context-aware) and cache context status
   local project_files, has_context = find_project_files(cfg)
 
   for _, path in ipairs(project_files) do
-    if not seen[path] then
+    if not seen[path] and not should_exclude_file(path, exclude_patterns) then
       seen[path] = true
       files[#files + 1] = path
     end
@@ -958,7 +1005,7 @@ function M.load_entries(cfg)
   if not has_context then
     for _, path in ipairs(cfg.global_files or {}) do
       path = vim.fs.normalize(path)
-      if not seen[path] then
+      if not seen[path] and not should_exclude_file(path, exclude_patterns) then
         seen[path] = true
         files[#files + 1] = path
       end
@@ -968,12 +1015,13 @@ function M.load_entries(cfg)
   local entries = {}
   local errors = {}
   local order = 0
+  local unescape = cfg.parser_unescape_basic ~= false
   for _, path in ipairs(files) do
     local text, err = read_file(path)
     if not text then
       errors[#errors + 1] = err or ("Failed to read %s"):format(path)
     else
-      local parsed = parse_entries(text, path)
+      local parsed = parse_entries(text, path, unescape)
       for _, entry in ipairs(parsed) do
         order = order + 1
         entry.order = order
@@ -982,6 +1030,30 @@ function M.load_entries(cfg)
     end
   end
   return entries, errors
+end
+
+---Check if a file matches any exclusion pattern.
+---@param path string The file path to check
+---@param patterns string[] Exclusion patterns
+---@return boolean True if file should be excluded
+function M.is_file_excluded(path, patterns)
+  return should_exclude_file(path, patterns)
+end
+
+---Load entries from a specific bib file.
+---@param path string The file path
+---@param unescape boolean|nil Whether to unescape basic LaTeX (default true)
+---@return SnacksBibtexEntry[]|nil entries Entries or nil on error
+---@return string|nil error Error message if failed
+function M.load_entries_from_file(path, unescape)
+  if unescape == nil then
+    unescape = true
+  end
+  local text, err = read_file(path)
+  if not text then
+    return nil, err or ("Failed to read %s"):format(path)
+  end
+  return parse_entries(text, path, unescape), nil
 end
 
 return M
